@@ -1,0 +1,65 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "G-Code",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#sequence-numbers" },
+    { "include": "#g-codes" },
+    { "include": "#m-codes" },
+    { "include": "#tool-and-height" },
+    { "include": "#feedrate" },
+    { "include": "#spindle" },
+    { "include": "#axis-and-params" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.parentheses.gcode",
+          "match": "\\(.*\\)"
+        },
+        {
+          "name": "comment.line.semicolon.gcode",
+          "match": ";.*$"
+        }
+      ]
+    },
+    "sequence-numbers": {
+      "name": "entity.name.tag.gcode.sequence",
+      "match": "[Nn]\\d+"
+    },
+    "g-codes": {
+      "name": "keyword.control.gcode.g",
+      "match": "[Gg]\\d{1,3}(\\.\\d+)?"
+    },
+    "m-codes": {
+      "name": "keyword.operator.gcode.m",
+      "match": "[Mm]\\d{1,3}"
+    },
+    "tool-and-height": {
+      "patterns": [
+        {
+          "name": "entity.name.type.gcode.tool",
+          "match": "[Tt]\\d{1,4}"
+        },
+        {
+          "name": "entity.name.type.gcode.height",
+          "match": "[HhDd]\\d{1,4}"
+        }
+      ]
+    },
+    "feedrate": {
+      "name": "keyword.other.feedrate.gcode",
+      "match": "[Ff][+-]?\\d+(\\.\\d+)?"
+    },
+    "spindle": {
+      "name": "constant.numeric.spindle.gcode",
+      "match": "[Ss][+-]?\\d+(\\.\\d+)?"
+    },
+    "axis-and-params": {
+      "name": "variable.parameter.gcode",
+      "match": "[XxYyZzAaBbCcRrIiJjKkPqQ][+-]?\\d+(\\.\\d+)?"
+    }
+  },
+  "scopeName": "source.gcode"
+}

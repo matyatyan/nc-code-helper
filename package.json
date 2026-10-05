@@ -1,0 +1,84 @@
+{
+  "name": "nc-code-helper",
+  "displayName": "NC Code Helper",
+  "description": "G-code highlighting and outline navigation helper for NC machining programs.",
+  "version": "0.0.2",
+  "main": "./out/extension.js",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:gcode"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "18.x",
+    "typescript": "^5.0.0"
+  },
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "ncCodeHelperCategoryView",
+          "name": "NC カラー設定"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "gcode",
+        "aliases": [
+          "G-Code",
+          "gcode"
+        ],
+        "extensions": [
+          ".nc",
+          ".gcode",
+          ".nd1",
+          ".ALL"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gcode",
+        "scopeName": "source.gcode",
+        "path": "./syntaxes/gcode.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      { "command": "ncCodeHelper.toggleOColor", "title": "NC: Oコード（プログラム番号）の切替" },
+      { "command": "ncCodeHelper.toggleNColor", "title": "NC: Nコード（シーケンス番号）の切替" },
+      { "command": "ncCodeHelper.toggleGColor", "title": "NC: Gコードの切替" },
+      { "command": "ncCodeHelper.toggleMColor", "title": "NC: Mコードの切替" },
+      { "command": "ncCodeHelper.toggleFSColor", "title": "NC: F/Sコード（送り・回転）の切替" },
+      { "command": "ncCodeHelper.toggleXYZColor", "title": "NC: 直線軸（XYZ）の切替" },
+      { "command": "ncCodeHelper.toggleABCColor", "title": "NC: 回転軸（ABC）の切替" },
+      { "command": "ncCodeHelper.toggleToolColor", "title": "NC: 工具・補正（THD）の切替" },
+      { "command": "ncCodeHelper.toggleOthersColor", "title": "NC: Pなどその他のパラメータの切替" }
+    ],
+    "configuration": {
+      "title": "NC Code Helper",
+      "properties": {
+        "ncCodeHelper.enableOColor": { "type": "boolean", "default": true, "description": "Oコード（プログラム番号）をカラー表示" },
+        "ncCodeHelper.enableNColor": { "type": "boolean", "default": true, "description": "Nコード（シーケンス番号）をカラー表示" },
+        "ncCodeHelper.enableGColor": { "type": "boolean", "default": true, "description": "Gコードをカラー表示" },
+        "ncCodeHelper.enableMColor": { "type": "boolean", "default": true, "description": "Mコードをカラー表示" },
+        "ncCodeHelper.enableFSColor": { "type": "boolean", "default": true, "description": "F/Sコード（送り・回転）をカラー表示" },
+        "ncCodeHelper.enableXYZColor": { "type": "boolean", "default": true, "description": "直線軸（XYZ）をカラー表示" },
+        "ncCodeHelper.enableABCColor": { "type": "boolean", "default": true, "description": "回転軸（ABC）をカラー表示" },
+        "ncCodeHelper.enableToolColor": { "type": "boolean", "default": true, "description": "工具・補正（THD等）をカラー表示" },
+        "ncCodeHelper.enableOthersColor": { "type": "boolean", "default": true, "description": "Pなどその他パラメータ（P,Q,R,I,J,K,U,V,W等）をカラー表示" }
+      }
+    }
+  }
+}
