@@ -1,6 +1,7 @@
-import { CategoryConfig } from './types';
-
-export const categories: CategoryConfig[] = [
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.categories = void 0;
+exports.categories = [
     { key: 'enableOColor', colorKey: 'colorO', label: 'O (プログラム番号)', icon: 'symbol-class', regex: /[Oo]\d+/g, defaultColor: '#FF1744' },
     { key: 'enableNColor', colorKey: 'colorN', label: 'N (シーケンス番号)', icon: 'symbol-number', regex: /[Nn]\d+/g, defaultColor: '#df8337' },
     { key: 'enableGColor', colorKey: 'colorG', label: 'G (準備機能)', icon: 'gear', regex: /[Gg](\d+(\.\d+)?|#\d+|#\[[^\]]+\])/g, defaultColor: '#ffa8db' },
@@ -10,12 +11,13 @@ export const categories: CategoryConfig[] = [
     { key: 'enableABCColor', colorKey: 'colorABC', label: 'ABC (回転軸)', icon: 'sync', regex: /[AaBbCc]([+-]?\d+(\.\d+)?|#\d+|#\[[^\]]+\])/g, defaultColor: '#b2ff94' },
     { key: 'enableToolColor', colorKey: 'colorTool', label: 'THD (工具・補正)', icon: 'wrench', regex: /[TtHhDd](\d+(\.\d+)?|#\d+|#\[[^\]]+\])/g, defaultColor: '#3112e0' },
     { key: 'enableOthersColor', colorKey: 'colorOthers', label: 'OTHERS (その他)', icon: 'symbol-parameter', regex: /[PpQqRrIiJjKkUuVvWw]([+-]?\d+(\.\d+)?|#\d+|#\[[^\]]+\])/g, defaultColor: '#f1a88d' },
-    { 
-        key: 'enableMacroColor', 
+    {
+        key: 'enableMacroColor',
         colorKey: 'colorMacro',
-        label: 'MACRO (マクロ機能・制御文)', 
-        icon: 'symbol-variable', 
-        regex: /#\d+|#\[[^\]]+\]|\b(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)\b/gi, 
-        defaultColor: '#e040fb' 
+        label: 'MACRO (マクロ機能・制御文)',
+        icon: 'symbol-variable',
+        regex: /#\d+|#\[[^\]]+\]|\b(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)\b/gi,
+        defaultColor: '#e040fb'
     }
 ];
+//# sourceMappingURL=categories.js.map

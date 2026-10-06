@@ -1,13 +1,15 @@
 import * as vscode from 'vscode';
-import { registerTreeView } from './treeView';
+import { registerTreeview } from './treeview';
 import { registerDocumentSymbolProvider } from './symbols';
-import { initializeDecorations, updateDecorations } from './decorator';
+import { initializeDecorations, updateDecorations, refreshDecorationStyles } from './decorator';
+import { registerHoverProvider } from './hover';
 
 export function activate(context: vscode.ExtensionContext) {
     // 1. 各機能の初期化・登録
     initializeDecorations(context);
-    const treeDataProvider = registerTreeView(context);
+    const treeDataProvider = registerTreeview(context);
     registerDocumentSymbolProvider(context);
+    registerHoverProvider(context);
 
     // 2. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -20,14 +22,16 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }, null, context.subscriptions);
 
+    // 3. 設定変更時のイベントハンドラ
     vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('ncCodeHelper')) {
-            updateDecorations();
+            refreshDecorationStyles(); // カラー定義を再生成
+            updateDecorations();        // 再描画
             treeDataProvider.refresh();
         }
     }, null, context.subscriptions);
 
-    // 3. 初回描画
+    // 4. 初回描画
     updateDecorations();
 }
 

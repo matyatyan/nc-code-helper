@@ -35,16 +35,16 @@ export class CategoryTreeDataProvider implements vscode.TreeDataProvider<Categor
     }
 }
 
-export function registerTreeView(context: vscode.ExtensionContext): CategoryTreeDataProvider {
+export function registerTreeview(context: vscode.ExtensionContext): CategoryTreeDataProvider {
     const treeDataProvider = new CategoryTreeDataProvider();
-    const treeView = vscode.window.createTreeView('ncCodeHelperCategoryView', {
+    const treeview = vscode.window.createTreeView('ncCodeHelperCategoryView', {
         treeDataProvider: treeDataProvider,
         showCollapseAll: false
     });
-    context.subscriptions.push(treeView);
+    context.subscriptions.push(treeview);
 
     context.subscriptions.push(
-        treeView.onDidChangeCheckboxState(async (event) => {
+        treeview.onDidChangeCheckboxState(async (event) => {
             const config = vscode.workspace.getConfiguration('ncCodeHelper');
             for (const [item, state] of event.items) {
                 const isChecked = state === vscode.TreeItemCheckboxState.Checked;

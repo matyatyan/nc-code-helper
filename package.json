@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "main": "./out/extension.js",
   "engines": {
     "vscode": "^1.80.0"
@@ -67,17 +67,38 @@
       { "command": "ncCodeHelper.toggleOthersColor", "title": "NC: Pなどその他のパラメータの切替" }
     ],
     "configuration": {
+      "type": "object",
       "title": "NC Code Helper",
       "properties": {
-        "ncCodeHelper.enableOColor": { "type": "boolean", "default": true, "description": "Oコード（プログラム番号）をカラー表示" },
-        "ncCodeHelper.enableNColor": { "type": "boolean", "default": true, "description": "Nコード（シーケンス番号）をカラー表示" },
-        "ncCodeHelper.enableGColor": { "type": "boolean", "default": true, "description": "Gコードをカラー表示" },
-        "ncCodeHelper.enableMColor": { "type": "boolean", "default": true, "description": "Mコードをカラー表示" },
-        "ncCodeHelper.enableFSColor": { "type": "boolean", "default": true, "description": "F/Sコード（送り・回転）をカラー表示" },
-        "ncCodeHelper.enableXYZColor": { "type": "boolean", "default": true, "description": "直線軸（XYZ）をカラー表示" },
-        "ncCodeHelper.enableABCColor": { "type": "boolean", "default": true, "description": "回転軸（ABC）をカラー表示" },
-        "ncCodeHelper.enableToolColor": { "type": "boolean", "default": true, "description": "工具・補正（THD等）をカラー表示" },
-        "ncCodeHelper.enableOthersColor": { "type": "boolean", "default": true, "description": "Pなどその他パラメータ（P,Q,R,I,J,K,U,V,W等）をカラー表示" }
+        "ncCodeHelper.enableOColor": { "type": "boolean", "default": true, "description": "Oコードのハイライト表示" },
+        "ncCodeHelper.colorO": { "type": "string", "default": "#FF1744", "format": "color", "description": "Oコードの表示色" },
+
+        "ncCodeHelper.enableNColor": { "type": "boolean", "default": true, "description": "Nコードのハイライト表示" },
+        "ncCodeHelper.colorN": { "type": "string", "default": "#df8337", "format": "color", "description": "Nコードの表示色" },
+
+        "ncCodeHelper.enableGColor": { "type": "boolean", "default": true, "description": "Gコードのハイライト表示" },
+        "ncCodeHelper.colorG": { "type": "string", "default": "#ffa8db", "format": "color", "description": "Gコードの表示色" },
+
+        "ncCodeHelper.enableMColor": { "type": "boolean", "default": true, "description": "Mコードのハイライト表示" },
+        "ncCodeHelper.colorM": { "type": "string", "default": "#eaadfc", "format": "color", "description": "Mコードの表示色" },
+
+        "ncCodeHelper.enableFSColor": { "type": "boolean", "default": true, "description": "FSコードのハイライト表示" },
+        "ncCodeHelper.colorFS": { "type": "string", "default": "#9cc4f8", "format": "color", "description": "FSコードの表示色" },
+
+        "ncCodeHelper.enableXYZColor": { "type": "boolean", "default": true, "description": "XYZ軸のハイライト表示" },
+        "ncCodeHelper.colorXYZ": { "type": "string", "default": "#76ee86", "format": "color", "description": "XYZ軸の表示色" },
+
+        "ncCodeHelper.enableABCColor": { "type": "boolean", "default": true, "description": "ABC軸のハイライト表示" },
+        "ncCodeHelper.colorABC": { "type": "string", "default": "#b2ff94", "format": "color", "description": "ABC軸の表示色" },
+
+        "ncCodeHelper.enableToolColor": { "type": "boolean", "default": true, "description": "工具・補正コードのハイライト表示" },
+        "ncCodeHelper.colorTool": { "type": "string", "default": "#3112e0", "format": "color", "description": "工具・補正コードの表示色" },
+
+        "ncCodeHelper.enableOthersColor": { "type": "boolean", "default": true, "description": "その他パラメータのハイライト表示" },
+        "ncCodeHelper.colorOthers": { "type": "string", "default": "#f1a88d", "format": "color", "description": "その他パラメータの表示色" },
+
+        "ncCodeHelper.enableMacroColor": { "type": "boolean", "default": true, "description": "マクロ制御・変数のハイライト表示" },
+        "ncCodeHelper.colorMacro": { "type": "string", "default": "#e040fb", "format": "color", "description": "マクロ制御・変数の表示色" }
       }
     }
   }
