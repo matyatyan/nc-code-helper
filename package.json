@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "main": "./out/extension.js",
   "engines": {
     "vscode": "^1.80.0"
@@ -26,6 +26,10 @@
   "contributes": {
     "views": {
       "explorer": [
+        {
+          "id": "ncCodeHelperMachinesView",
+          "name": "設備一覧 (Mコード参照)"
+        },
         {
           "id": "ncCodeHelperCategoryView",
           "name": "NC カラー設定"
@@ -64,8 +68,22 @@
       { "command": "ncCodeHelper.toggleXYZColor", "title": "NC: 直線軸（XYZ）の切替" },
       { "command": "ncCodeHelper.toggleABCColor", "title": "NC: 回転軸（ABC）の切替" },
       { "command": "ncCodeHelper.toggleToolColor", "title": "NC: 工具・補正（THD）の切替" },
-      { "command": "ncCodeHelper.toggleOthersColor", "title": "NC: Pなどその他のパラメータの切替" }
+      { "command": "ncCodeHelper.toggleOthersColor", "title": "NC: Pなどその他のパラメータの切替" },
+      {
+        "command": "ncCodeHelper.openStorageFolder",
+        "title": "設備JSON保存フォルダを開く",
+        "icon": "$(folder-opened)"
+      }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ncCodeHelper.openStorageFolder",
+          "when": "view == ncCodeHelperMachinesView",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "NC Code Helper",

@@ -3,13 +3,20 @@ import { registerTreeview } from './treeview';
 import { registerDocumentSymbolProvider } from './symbols';
 import { initializeDecorations, updateDecorations, refreshDecorationStyles } from './decorator';
 import { registerHoverProvider } from './hover';
+import { registerCommands } from './commands';
 
 export function activate(context: vscode.ExtensionContext) {
     // 1. 各機能の初期化・登録
     initializeDecorations(context);
-    const treeDataProvider = registerTreeview(context);
+    
+    // ツリービューの登録（返り値の変数名を treeview.ts と一致させる）
+    const { machineDataProvider, colorDataProvider } = registerTreeview(context);
+    
     registerDocumentSymbolProvider(context);
     registerHoverProvider(context);
+    
+    // コマンド登録に machineDataProvider を渡す
+    registerCommands(context, machineDataProvider);
 
     // 2. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
@@ -26,8 +33,8 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('ncCodeHelper')) {
             refreshDecorationStyles(); // カラー定義を再生成
-            updateDecorations();        // 再描画
-            treeDataProvider.refresh();
+            updateDecorations(); // 再描画
+            colorDataProvider.refresh(); // カラーツリーの再読み込み
         }
     }, null, context.subscriptions);
 
