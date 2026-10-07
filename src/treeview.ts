@@ -22,7 +22,8 @@ export class CategoryTreeItem extends vscode.TreeItem {
         public readonly category?: CategoryConfig,
         isEnabled?: boolean,
         public readonly machineName?: string,
-        public readonly isAddButton?: boolean
+        public readonly isAddButton?: boolean,
+        public readonly isMachineChecked?: boolean
     ) {
         super(label, collapsibleState);
 
@@ -45,6 +46,12 @@ export class CategoryTreeItem extends vscode.TreeItem {
             this.iconPath = new vscode.ThemeIcon('wrench');
             this.tooltip = `クリックして ${machineName}.json を開く`;
             this.contextValue = 'machineItem';
+            
+            // 設備アイテムにチェックボックスを設定
+            this.checkboxState = isMachineChecked
+                ? vscode.TreeItemCheckboxState.Checked
+                : vscode.TreeItemCheckboxState.Unchecked;
+
             this.command = {
                 command: 'ncCodeHelper.openMachineJson',
                 title: 'Open Machine JSON',
@@ -77,12 +84,25 @@ export class MachineTreeDataProvider implements vscode.TreeDataProvider<Category
         const folder = getStorageMachineFolder(this.context);
         const items: CategoryTreeItem[] = [];
 
+        // 保存されているチェック選択済み設備リストを取得
+        const selectedMachines = this.context.globalState.get<string[]>('selectedMachines', []);
+
         // 専用フォルダ内の .json ファイルをすべて一覧表示
         if (fs.existsSync(folder)) {
             const files = fs.readdirSync(folder).filter(file => file.endsWith('.json'));
             files.forEach(file => {
                 const machineName = path.basename(file, '.json');
-                items.push(new CategoryTreeItem(machineName, vscode.TreeItemCollapsibleState.None, undefined, undefined, machineName));
+                const isChecked = selectedMachines.includes(machineName);
+                
+                items.push(new CategoryTreeItem(
+                    machineName,
+                    vscode.TreeItemCollapsibleState.None,
+                    undefined,
+                    undefined,
+                    machineName,
+                    false,
+                    isChecked
+                ));
             });
         }
 
@@ -128,21 +148,41 @@ export function registerTreeview(context: vscode.ExtensionContext) {
     const machineDataProvider = new MachineTreeDataProvider(context);
     const colorDataProvider = new ColorTreeDataProvider(context);
 
-    // 1. 設備一覧ビューの登録 (package.json の "id": "ncCodeHelperMachinesView" に対応)
+    // 1. 設備一覧ビューの登録
     const machineTreeView = vscode.window.createTreeView('ncCodeHelperMachinesView', {
         treeDataProvider: machineDataProvider,
         showCollapseAll: false
     });
     context.subscriptions.push(machineTreeView);
 
-    // 2. カラー表示設定ビューの登録 (package.json の "id": "ncCodeHelperCategoryView" に対応)
+    // 設備のチェックボックス変更ハンドラ
+    context.subscriptions.push(
+        machineTreeView.onDidChangeCheckboxState(async (event) => {
+            let selectedMachines = context.globalState.get<string[]>('selectedMachines', []);
+            
+            for (const [item, state] of event.items) {
+                if (item.machineName) {
+                    if (state === vscode.TreeItemCheckboxState.Checked) {
+                        if (!selectedMachines.includes(item.machineName)) {
+                            selectedMachines.push(item.machineName);
+                        }
+                    } else {
+                        selectedMachines = selectedMachines.filter(name => name !== item.machineName);
+                    }
+                }
+            }
+            await context.globalState.update('selectedMachines', selectedMachines);
+            machineDataProvider.refresh();
+        })
+    );
+
+    // 2. カラー表示設定ビューの登録
     const colorTreeView = vscode.window.createTreeView('ncCodeHelperCategoryView', {
         treeDataProvider: colorDataProvider,
         showCollapseAll: false
     });
     context.subscriptions.push(colorTreeView);
 
-    // チェックボックス変更イベントハンドラ（カラー表示設定用）
     context.subscriptions.push(
         colorTreeView.onDidChangeCheckboxState(async (event) => {
             const config = vscode.workspace.getConfiguration('ncCodeHelper');

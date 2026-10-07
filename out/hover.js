@@ -2,42 +2,86 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerHoverProvider = registerHoverProvider;
 const vscode = require("vscode");
+const path = require("path");
+const fs = require("fs");
+const treeview_1 = require("./treeview");
 function registerHoverProvider(context) {
-    const hoverProvider = vscode.languages.registerHoverProvider({ language: 'gcode' }, {
-        provideHover(document, position) {
-            const range = document.getWordRangeAtPosition(position, /#\d+|#\[[^\]]+\]/);
-            if (!range) {
-                return null;
-            }
-            const targetVar = document.getText(range).toUpperCase(); // 例: "#900"
-            const currentLineIndex = position.line;
-            let foundValue = null;
-            // カーソル行から上方向へ1行ずつ遡って探索
-            for (let i = currentLineIndex; i >= 0; i--) {
-                const lineText = document.lineAt(i).text;
-                // コメント部分 ( ... ) を除去して解析
-                const cleanLine = lineText.replace(/\(.*?\)/g, '').trim();
-                // 1. 他の O番号（プログラム定義）に達したら、プログラム境界を越えないよう探索終了
-                if (i < currentLineIndex && /^[Oo]\d+/.test(cleanLine)) {
-                    break;
+    const provider = vscode.languages.registerHoverProvider([{ scheme: 'file', language: 'nc' }, { scheme: 'file', language: 'gcode' }], {
+        provideHover(document, position, token) {
+            // 1. Mコードのホバー処理（選択・チェック中設備のMコード定義を出力）
+            const mCodeRange = document.getWordRangeAtPosition(position, /M\d+/i);
+            if (mCodeRange) {
+                const code = document.getText(mCodeRange).toUpperCase();
+                const selectedMachines = context.globalState.get('selectedMachines', []);
+                if (selectedMachines.length > 0) {
+                    const folder = (0, treeview_1.getStorageMachineFolder)(context);
+                    const hoverTexts = [];
+                    for (const machineName of selectedMachines) {
+                        const jsonPath = path.join(folder, `${machineName}.json`);
+                        if (fs.existsSync(jsonPath)) {
+                            try {
+                                const rawData = fs.readFileSync(jsonPath, 'utf8');
+                                const data = JSON.parse(rawData);
+                                const mCodes = data.mCodes;
+                                if (mCodes && mCodes[code]) {
+                                    hoverTexts.push(`**${data.machine || machineName}**: ${mCodes[code]}`);
+                                }
+                            }
+                            catch (e) {
+                                // JSONパースエラー時は無視
+                            }
+                        }
+                    }
+                    if (hoverTexts.length > 0) {
+                        const markdown = new vscode.MarkdownString();
+                        markdown.appendMarkdown(`**${code}**\n\n`);
+                        markdown.appendMarkdown(hoverTexts.join('\n\n'));
+                        return new vscode.Hover(markdown, mCodeRange);
+                    }
                 }
-                // 2. 代入文の検出 (#900 = 12.34 や #900=100)
-                // 正規表現で「変数名 = 右辺」を抽出
-                const assignmentRegex = new RegExp(`${targetVar.replace('[', '\\[').replace(']', '\\]')}\\s*=\\s*([^\\s;,]+)`, 'i');
-                const match = cleanLine.match(assignmentRegex);
-                if (match) {
-                    foundValue = match[1];
-                    break; // 直近の代入が見つかったら探索終了
-                }
             }
-            // ポップアップ表示用の Markdown コンテンツを生成
-            const displayValue = foundValue !== null ? foundValue : 'NULL';
-            const markdown = new vscode.MarkdownString();
-            markdown.appendMarkdown(`**NC Macro Variable**\n\n`);
-            markdown.appendMarkdown(`\`${targetVar}\` = \`${displayValue}\``);
-            return new vscode.Hover(markdown, range);
+            // 2. マクロ変数（#100, #500 等）の代入値ホバー処理（同一O番号ブロック内限定）
+            const macroRange = document.getWordRangeAtPosition(position, /#\d+/);
+            if (macroRange) {
+                const varName = document.getText(macroRange); // 例: "#500"
+                const currentLine = position.line;
+                // カーソル位置から上に遡り、直近の O番号（プログラム開始行）の行番号を探す
+                let startLine = 0;
+                for (let i = currentLine; i >= 0; i--) {
+                    const lineText = document.lineAt(i).text;
+                    const codePart = lineText.split('(')[0]; // コメント除外
+                    if (/O\d+/i.test(codePart)) {
+                        startLine = i;
+                        break;
+                    }
+                }
+                let assignedValue = undefined;
+                let foundLine = undefined;
+                // 変数への代入文判定用正規表現（例: #500=10.5 や #100 = #100 + 1）
+                const assignRegex = new RegExp(`^\\s*${varName.replace('#', '\\#')}\\s*=\\s*(.+)`, 'i');
+                // 同じO番号ブロックの先頭（startLine）から現在行（currentLine）までスキャン
+                for (let i = startLine; i <= currentLine; i++) {
+                    const lineText = document.lineAt(i).text;
+                    const codePart = lineText.split('(')[0];
+                    const match = codePart.match(assignRegex);
+                    if (match) {
+                        assignedValue = match[1].trim();
+                        foundLine = i + 1; // 1行ベースの行番号
+                    }
+                }
+                const markdown = new vscode.MarkdownString();
+                markdown.appendMarkdown(`**マクロ変数** ${varName}\n\n`);
+                if (assignedValue !== undefined && foundLine !== undefined) {
+                    markdown.appendMarkdown(`**値**: \`${assignedValue}\`` + `*(L${foundLine} 行目で設定)*`);
+                }
+                else {
+                    markdown.appendMarkdown(`*NULL*`);
+                }
+                return new vscode.Hover(markdown, macroRange);
+            }
+            return undefined;
         }
     });
-    context.subscriptions.push(hoverProvider);
+    context.subscriptions.push(provider);
 }
 //# sourceMappingURL=hover.js.map

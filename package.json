@@ -2,8 +2,9 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "main": "./out/extension.js",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -28,7 +29,7 @@
       "explorer": [
         {
           "id": "ncCodeHelperMachinesView",
-          "name": "設備一覧 (Mコード参照)"
+          "name": "Mコード参照"
         },
         {
           "id": "ncCodeHelperCategoryView",

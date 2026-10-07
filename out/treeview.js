@@ -17,13 +17,14 @@ function getStorageMachineFolder(context) {
     return machineFolder;
 }
 class CategoryTreeItem extends vscode.TreeItem {
-    constructor(label, collapsibleState, category, isEnabled, machineName, isAddButton) {
+    constructor(label, collapsibleState, category, isEnabled, machineName, isAddButton, isMachineChecked) {
         super(label, collapsibleState);
         this.label = label;
         this.collapsibleState = collapsibleState;
         this.category = category;
         this.machineName = machineName;
         this.isAddButton = isAddButton;
+        this.isMachineChecked = isMachineChecked;
         if (isAddButton) {
             this.iconPath = new vscode.ThemeIcon('add');
             this.tooltip = '新しい設備Mコード定義(JSON)を追加';
@@ -45,6 +46,10 @@ class CategoryTreeItem extends vscode.TreeItem {
             this.iconPath = new vscode.ThemeIcon('wrench');
             this.tooltip = `クリックして ${machineName}.json を開く`;
             this.contextValue = 'machineItem';
+            // 設備アイテムにチェックボックスを設定
+            this.checkboxState = isMachineChecked
+                ? vscode.TreeItemCheckboxState.Checked
+                : vscode.TreeItemCheckboxState.Unchecked;
             this.command = {
                 command: 'ncCodeHelper.openMachineJson',
                 title: 'Open Machine JSON',
@@ -74,12 +79,15 @@ class MachineTreeDataProvider {
             return [];
         const folder = getStorageMachineFolder(this.context);
         const items = [];
+        // 保存されているチェック選択済み設備リストを取得
+        const selectedMachines = this.context.globalState.get('selectedMachines', []);
         // 専用フォルダ内の .json ファイルをすべて一覧表示
         if (fs.existsSync(folder)) {
             const files = fs.readdirSync(folder).filter(file => file.endsWith('.json'));
             files.forEach(file => {
                 const machineName = path.basename(file, '.json');
-                items.push(new CategoryTreeItem(machineName, vscode.TreeItemCollapsibleState.None, undefined, undefined, machineName));
+                const isChecked = selectedMachines.includes(machineName);
+                items.push(new CategoryTreeItem(machineName, vscode.TreeItemCollapsibleState.None, undefined, undefined, machineName, false, isChecked));
             });
         }
         // 末尾に「新規追加」ボタンを配置
@@ -120,19 +128,36 @@ exports.ColorTreeDataProvider = ColorTreeDataProvider;
 function registerTreeview(context) {
     const machineDataProvider = new MachineTreeDataProvider(context);
     const colorDataProvider = new ColorTreeDataProvider(context);
-    // 1. 設備一覧ビューの登録 (package.json の "id": "ncCodeHelperMachinesView" に対応)
+    // 1. 設備一覧ビューの登録
     const machineTreeView = vscode.window.createTreeView('ncCodeHelperMachinesView', {
         treeDataProvider: machineDataProvider,
         showCollapseAll: false
     });
     context.subscriptions.push(machineTreeView);
-    // 2. カラー表示設定ビューの登録 (package.json の "id": "ncCodeHelperCategoryView" に対応)
+    // 設備のチェックボックス変更ハンドラ
+    context.subscriptions.push(machineTreeView.onDidChangeCheckboxState(async (event) => {
+        let selectedMachines = context.globalState.get('selectedMachines', []);
+        for (const [item, state] of event.items) {
+            if (item.machineName) {
+                if (state === vscode.TreeItemCheckboxState.Checked) {
+                    if (!selectedMachines.includes(item.machineName)) {
+                        selectedMachines.push(item.machineName);
+                    }
+                }
+                else {
+                    selectedMachines = selectedMachines.filter(name => name !== item.machineName);
+                }
+            }
+        }
+        await context.globalState.update('selectedMachines', selectedMachines);
+        machineDataProvider.refresh();
+    }));
+    // 2. カラー表示設定ビューの登録
     const colorTreeView = vscode.window.createTreeView('ncCodeHelperCategoryView', {
         treeDataProvider: colorDataProvider,
         showCollapseAll: false
     });
     context.subscriptions.push(colorTreeView);
-    // チェックボックス変更イベントハンドラ（カラー表示設定用）
     context.subscriptions.push(colorTreeView.onDidChangeCheckboxState(async (event) => {
         const config = vscode.workspace.getConfiguration('ncCodeHelper');
         for (const [item, state] of event.items) {
