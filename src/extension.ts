@@ -4,8 +4,27 @@ import { registerDocumentSymbolProvider } from './symbols';
 import { initializeDecorations, updateDecorations, refreshDecorationStyles } from './decorator';
 import { registerHoverProvider } from './hover';
 import { registerCommands } from './commands';
+import { registerToolCheckDiagnostics } from './diagnostics';
+import { isNcDocument } from './utils';
 
 export function activate(context: vscode.ExtensionContext) {
+    // ドキュメントが開かれた時、NCコード判定されたら言語IDを 'gcode' に割り当てる
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(doc => {
+            if (doc.languageId !== 'gcode' && isNcDocument(doc)) {
+                vscode.languages.setTextDocumentLanguage(doc, 'gcode');
+            }
+        })
+    );
+
+    // 起動時にすでに開かれているアクティブエディタもチェック
+    if (vscode.window.activeTextEditor) {
+        const doc = vscode.window.activeTextEditor.document;
+        if (doc.languageId !== 'gcode' && isNcDocument(doc)) {
+            vscode.languages.setTextDocumentLanguage(doc, 'gcode');
+        }
+    }
+
     // 1. 各機能の初期化・登録
     initializeDecorations(context);
     
@@ -37,6 +56,12 @@ export function activate(context: vscode.ExtensionContext) {
             colorDataProvider.refresh(); // カラーツリーの再読み込み
         }
     }, null, context.subscriptions);
+
+    // ツール番号とH番号不一致チェックの登録
+    registerToolCheckDiagnostics(context);
+
+    // 3D ビューアの登録
+    // register3DViewer(context);
 
     // 4. 初回描画
     updateDecorations();

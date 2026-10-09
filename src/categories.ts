@@ -1,3 +1,4 @@
+// カテゴリ別の色分け
 import { CategoryConfig } from './types';
 
 export const categories: CategoryConfig[] = [

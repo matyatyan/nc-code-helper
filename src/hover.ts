@@ -1,3 +1,5 @@
+// Mコードのホバー表示
+// マクロ変数のホバー表示（同一O番号ブロック内限定）
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';

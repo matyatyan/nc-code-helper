@@ -15,6 +15,7 @@ export function getStorageMachineFolder(context: vscode.ExtensionContext): strin
     return machineFolder;
 }
 
+// ツリービュー（サイドバー）の各ノード要素を表現
 export class CategoryTreeItem extends vscode.TreeItem {
     constructor(
         public readonly label: string,
@@ -27,6 +28,7 @@ export class CategoryTreeItem extends vscode.TreeItem {
     ) {
         super(label, collapsibleState);
 
+        // 1:新規設備(JSON)追加ボタン
         if (isAddButton) {
             this.iconPath = new vscode.ThemeIcon('add');
             this.tooltip = '新しい設備Mコード定義(JSON)を追加';
@@ -35,23 +37,32 @@ export class CategoryTreeItem extends vscode.TreeItem {
                 command: 'ncCodeHelper.addMachineJson',
                 title: 'Add Machine JSON'
             };
-        } else if (category) {
+        }
+        
+        //　2:NCコード表示色
+        else if (category) {
             this.iconPath = new vscode.ThemeIcon(category.icon);
             this.tooltip = `${category.label} のハイライト表示切替`;
+
+            // 有効・無効を切り替えるチェックボックス
             this.checkboxState = isEnabled
                 ? vscode.TreeItemCheckboxState.Checked
                 : vscode.TreeItemCheckboxState.Unchecked;
             this.contextValue = 'categoryItem';
-        } else if (machineName) {
+        } 
+        
+        // 3:各設備のJSON定義
+        else if (machineName) {
             this.iconPath = new vscode.ThemeIcon('wrench');
             this.tooltip = `クリックして ${machineName}.json を開く`;
             this.contextValue = 'machineItem';
             
-            // 設備アイテムにチェックボックスを設定
+            // 該当する設備が選択中かどうかをチェックボックスで表示
             this.checkboxState = isMachineChecked
                 ? vscode.TreeItemCheckboxState.Checked
                 : vscode.TreeItemCheckboxState.Unchecked;
 
+            // クリック時に該当する設備のJSONファイルを開く
             this.command = {
                 command: 'ncCodeHelper.openMachineJson',
                 title: 'Open Machine JSON',

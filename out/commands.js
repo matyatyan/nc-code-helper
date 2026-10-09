@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerCommands = registerCommands;
+// エクスプローラーへの機能表示
 const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");

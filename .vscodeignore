@@ -2,3 +2,9 @@
 .vscode-test/**
 .gitignore
 vsc-extension-quickstart.md
+
+# viewer3d 機能のプログラムを除外
+src/viewer3d.ts
+
+# node_modules 全体を除外
+node_modules/three/**

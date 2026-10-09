@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerHoverProvider = registerHoverProvider;
+// Mコードのホバー表示
+// マクロ変数のホバー表示（同一O番号ブロック内限定）
 const vscode = require("vscode");
 const path = require("path");
 const fs = require("fs");

@@ -132,6 +132,5 @@ NCデータ（Gコード）の編集・解読効率を向上させる VS Code �
 
 ## ライセンス
 
-[MIT License](./LICENSE)
-
+ 
 ---
