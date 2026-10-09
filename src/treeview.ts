@@ -12,6 +12,34 @@ export function getStorageMachineFolder(context: vscode.ExtensionContext): strin
     if (!fs.existsSync(machineFolder)) {
         fs.mkdirSync(machineFolder, { recursive: true });
     }
+
+    // 初回起動時、sample.json が存在しなければデフォルトで作成
+    const samplePath = path.join(machineFolder, 'sample.json');
+    if (!fs.existsSync(samplePath)) {
+        const sampleData = {
+            "machine": "sample",
+            "description": "マシニングセンタ用 Mコード",
+            "version": "1.0.0",
+            "mCodes": {
+                "M00": "プログラムストップ",
+                "M01": "オプショナルストップ",
+                "M02": "プログラム終了",
+                "M03": "主軸正転",
+                "M04": "主軸逆転",
+                "M05": "主軸停止",
+                "M06": "工具交換（ATC）",
+                "M08": "クーラント ON",
+                "M09": "クーラント OFF",
+                "M10": "A/C軸クランプ",
+                "M11": "A/C軸アンクランプ",
+                "M30": "プログラム終了（リセット・復帰）",
+                "M100": "センタクーラント ON",
+                "M101": "センタクーラント OFF"
+            }
+        };
+        fs.writeFileSync(samplePath, JSON.stringify(sampleData, null, 2), 'utf8');
+    }
+
     return machineFolder;
 }
 
@@ -23,12 +51,11 @@ export class CategoryTreeItem extends vscode.TreeItem {
         public readonly category?: CategoryConfig,
         isEnabled?: boolean,
         public readonly machineName?: string,
-        public readonly isAddButton?: boolean,
-        public readonly isMachineChecked?: boolean
+        public readonly isAddButton?: boolean
     ) {
         super(label, collapsibleState);
 
-        // 1:新規設備(JSON)追加ボタン
+        // 1: 新規設備(JSON)追加ボタン
         if (isAddButton) {
             this.iconPath = new vscode.ThemeIcon('add');
             this.tooltip = '新しい設備Mコード定義(JSON)を追加';
@@ -39,30 +66,26 @@ export class CategoryTreeItem extends vscode.TreeItem {
             };
         }
         
-        //　2:NCコード表示色
+        // 2: NCコード表示色カテゴリ
         else if (category) {
             this.iconPath = new vscode.ThemeIcon(category.icon);
             this.tooltip = `${category.label} のハイライト表示切替`;
 
-            // 有効・無効を切り替えるチェックボックス
+            // カラー設定側は有効・無効切り替え用チェックボックスを保持
             this.checkboxState = isEnabled
                 ? vscode.TreeItemCheckboxState.Checked
                 : vscode.TreeItemCheckboxState.Unchecked;
             this.contextValue = 'categoryItem';
         } 
         
-        // 3:各設備のJSON定義
+        // 3: 各設備のJSON定義（クリック動作を優先するためチェックボックスを排斥）
         else if (machineName) {
             this.iconPath = new vscode.ThemeIcon('wrench');
-            this.tooltip = `クリックして ${machineName}.json を開く`;
+            this.tooltip = `クリックして ${machineName} のMコード一覧を表示`;
             this.contextValue = 'machineItem';
             
-            // 該当する設備が選択中かどうかをチェックボックスで表示
-            this.checkboxState = isMachineChecked
-                ? vscode.TreeItemCheckboxState.Checked
-                : vscode.TreeItemCheckboxState.Unchecked;
-
-            // クリック時に該当する設備のJSONファイルを開く
+            // ★ チェックボックス（this.checkboxState）を設定しないことで、
+            // クリック時にチェック処理へ横取りされず確実にコマンドを実行させる
             this.command = {
                 command: 'ncCodeHelper.openMachineJson',
                 title: 'Open Machine JSON',
@@ -95,15 +118,11 @@ export class MachineTreeDataProvider implements vscode.TreeDataProvider<Category
         const folder = getStorageMachineFolder(this.context);
         const items: CategoryTreeItem[] = [];
 
-        // 保存されているチェック選択済み設備リストを取得
-        const selectedMachines = this.context.globalState.get<string[]>('selectedMachines', []);
-
         // 専用フォルダ内の .json ファイルをすべて一覧表示
         if (fs.existsSync(folder)) {
             const files = fs.readdirSync(folder).filter(file => file.endsWith('.json'));
             files.forEach(file => {
                 const machineName = path.basename(file, '.json');
-                const isChecked = selectedMachines.includes(machineName);
                 
                 items.push(new CategoryTreeItem(
                     machineName,
@@ -111,8 +130,7 @@ export class MachineTreeDataProvider implements vscode.TreeDataProvider<Category
                     undefined,
                     undefined,
                     machineName,
-                    false,
-                    isChecked
+                    false
                 ));
             });
         }

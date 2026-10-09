@@ -2,16 +2,31 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-// ★ CategoryTreeDataProvider から MachineTreeDataProvider へ変更
 import { getStorageMachineFolder, MachineTreeDataProvider } from './treeview';
+import { MachineWebviewProvider } from './machineWebviewProvider';
 
-// ★ 引数の型定義を MachineTreeDataProvider へ変更
-export function registerCommands(context: vscode.ExtensionContext, treeDataProvider: MachineTreeDataProvider): void {
+export function registerCommands(
+    context: vscode.ExtensionContext, 
+    treeDataProvider: MachineTreeDataProvider, 
+    webviewProvider: MachineWebviewProvider
+): void {
 
-    // 1. 設備名をクリックした際：HTML（Webview）で綺麗な表として表示する
+    // 1. 設備名をクリックした際：下部パネルなどの WebviewView へデータを送って表示
     const openMachineCommand = vscode.commands.registerCommand(
         'ncCodeHelper.openMachineJson',
-        async (machineName: string) => {
+        async (itemOrName: any) => {
+            let machineName = '';
+            if (typeof itemOrName === 'string') {
+                machineName = itemOrName;
+            } else if (itemOrName && typeof itemOrName === 'object') {
+                machineName = itemOrName.machineName || itemOrName.label || '';
+            }
+
+            if (!machineName) {
+                vscode.window.showErrorMessage('設備名を取得できませんでした。');
+                return;
+            }
+
             const folder = getStorageMachineFolder(context);
             const jsonPath = path.join(folder, `${machineName}.json`);
 
@@ -24,97 +39,12 @@ export function registerCommands(context: vscode.ExtensionContext, treeDataProvi
                 const rawData = fs.readFileSync(jsonPath, 'utf8');
                 const data = JSON.parse(rawData);
 
-                // Webviewパネルの作成（右側に開く）
-                const panel = vscode.window.createWebviewPanel(
-                    'machineCodeView',
-                    `設備: ${data.machine || machineName}`,
-                    vscode.ViewColumn.Beside,
-                    {
-                        enableScripts: true
-                    }
-                );
+                // ★ ホバー表示用に「現在アクティブな設備」として名前を保存
+                await context.globalState.update('activeMachine', machineName);
 
-                // テーブル行の生成
-                let rowsHtml = '';
-                if (data.mCodes && typeof data.mCodes === 'object') {
-                    for (const [code, desc] of Object.entries(data.mCodes)) {
-                        rowsHtml += `
-                            <tr>
-                                <td class="code">${code}</td>
-                                <td class="desc">${desc}</td>
-                            </tr>
-                        `;
-                    }
-                } else {
-                    rowsHtml = `<tr><td colspan="2">Mコード定義が見つかりません</td></tr>`;
-                }
-
-                // VS Codeの標準デザインに馴染むHTML/CSS
-                panel.webview.html = `
-                    <!DOCTYPE html>
-                    <html lang="ja">
-                    <head>
-                        <meta charset="UTF-8">
-                        <style>
-                            body {
-                                font-family: var(--vscode-font-family);
-                                padding: 20px;
-                                color: var(--vscode-editor-foreground);
-                                background-color: var(--vscode-editor-backgroundColor);
-                            }
-                            h1 {
-                                font-size: 1.4em;
-                                margin-bottom: 5px;
-                                border-bottom: 1px solid var(--vscode-panel-border);
-                                padding-bottom: 8px;
-                            }
-                            p.desc {
-                                color: var(--vscode-descriptionForeground);
-                                margin-bottom: 20px;
-                            }
-                            table {
-                                width: 100%;
-                                border-collapse: collapse;
-                                margin-top: 10px;
-                            }
-                            th, td {
-                                text-align: left;
-                                padding: 8px 12px;
-                                border-bottom: 1px solid var(--vscode-widget-border);
-                            }
-                            th {
-                                background-color: var(--vscode-editor-lineHighlightBackground);
-                                font-weight: bold;
-                            }
-                            tr:hover {
-                                background-color: var(--vscode-list-hoverBackground);
-                            }
-                            td.code {
-                                font-family: var(--vscode-editor-font-family);
-                                font-weight: bold;
-                                color: var(--vscode-symbolIcon-keywordForeground, #4ec9b0);
-                                width: 120px;
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <h1>設備: ${data.machine || machineName}</h1>
-                        ${data.description ? `<p class="desc">${data.description}</p>` : ''}
-
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Mコード</th>
-                                    <th>説明</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${rowsHtml}
-                            </tbody>
-                        </table>
-                    </body>
-                    </html>
-                `;
+                // 下部パネルへフォーカス＆更新（第1引数: data, 第2引数: machineName）
+                await vscode.commands.executeCommand('ncCodeHelperMachineDetailView.focus');
+                webviewProvider.updateMachineData(data, machineName);
 
             } catch (err) {
                 vscode.window.showErrorMessage(`JSONファイルの読み込みエラー: ${err}`);
@@ -158,6 +88,7 @@ export function registerCommands(context: vscode.ExtensionContext, treeDataProvi
             fs.copyFileSync(selectedUri.fsPath, targetPath);
             vscode.window.showInformationMessage(`設備「${machineName}」を追加しました。`);
 
+            // ツリーの更新と下部表示の切り替え
             treeDataProvider.refresh();
             await vscode.commands.executeCommand('ncCodeHelper.openMachineJson', machineName);
         }

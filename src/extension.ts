@@ -6,9 +6,10 @@ import { registerHoverProvider } from './hover';
 import { registerCommands } from './commands';
 import { registerToolCheckDiagnostics } from './diagnostics';
 import { isNcDocument } from './utils';
+import { MachineWebviewProvider } from './machineWebviewProvider'; // ★ import を追加
 
 export function activate(context: vscode.ExtensionContext) {
-    // ドキュメントが開かれた時、NCコード判定されたら言語IDを 'gcode' に割り当てる
+    // 1. NCファイル自動判定＆言語ID設定
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(doc => {
             if (doc.languageId !== 'gcode' && isNcDocument(doc)) {
@@ -25,19 +26,30 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }
 
-    // 1. 各機能の初期化・登録
-    initializeDecorations(context);
-    
-    // ツリービューの登録（返り値の変数名を treeview.ts と一致させる）
+    // 2. ツリービューの登録（DataProvider の取得）
     const { machineDataProvider, colorDataProvider } = registerTreeview(context);
-    
+
+    // 3. 下部 Mコード定義用 WebviewViewProvider の登録
+    const provider = new MachineWebviewProvider(context.extensionUri);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(MachineWebviewProvider.viewType, provider)
+    );
+
+    // 4. 各種機能およびコマンドの登録
+    initializeDecorations(context);
     registerDocumentSymbolProvider(context);
     registerHoverProvider(context);
     
-    // コマンド登録に machineDataProvider を渡す
-    registerCommands(context, machineDataProvider);
+    // コマンド登録（引数に machineDataProvider と provider の両方を1度だけ渡す）
+    registerCommands(context, machineDataProvider, provider);
 
-    // 2. イベントハンドラの設定
+    // ツール番号とH番号の不一致チェック（Diagnostic）の登録
+    registerToolCheckDiagnostics(context);
+
+    // 3D ビューアの登録（一時停止中）
+    // register3DViewer(context);
+
+    // 5. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor) updateDecorations();
     }, null, context.subscriptions);
@@ -48,22 +60,16 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }, null, context.subscriptions);
 
-    // 3. 設定変更時のイベントハンドラ
+    // 6. 設定変更時のイベントハンドラ
     vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('ncCodeHelper')) {
             refreshDecorationStyles(); // カラー定義を再生成
-            updateDecorations(); // 再描画
+            updateDecorations();       // 再描画
             colorDataProvider.refresh(); // カラーツリーの再読み込み
         }
     }, null, context.subscriptions);
 
-    // ツール番号とH番号不一致チェックの登録
-    registerToolCheckDiagnostics(context);
-
-    // 3D ビューアの登録
-    // register3DViewer(context);
-
-    // 4. 初回描画
+    // 7. 初回描画の実行
     updateDecorations();
 }
 

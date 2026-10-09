@@ -10,8 +10,9 @@ const hover_1 = require("./hover");
 const commands_1 = require("./commands");
 const diagnostics_1 = require("./diagnostics");
 const utils_1 = require("./utils");
+const machineWebviewProvider_1 = require("./machineWebviewProvider"); // ★ import を追加
 function activate(context) {
-    // ドキュメントが開かれた時、NCコード判定されたら言語IDを 'gcode' に割り当てる
+    // 1. NCファイル自動判定＆言語ID設定
     context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(doc => {
         if (doc.languageId !== 'gcode' && (0, utils_1.isNcDocument)(doc)) {
             vscode.languages.setTextDocumentLanguage(doc, 'gcode');
@@ -24,15 +25,22 @@ function activate(context) {
             vscode.languages.setTextDocumentLanguage(doc, 'gcode');
         }
     }
-    // 1. 各機能の初期化・登録
-    (0, decorator_1.initializeDecorations)(context);
-    // ツリービューの登録（返り値の変数名を treeview.ts と一致させる）
+    // 2. ツリービューの登録（DataProvider の取得）
     const { machineDataProvider, colorDataProvider } = (0, treeview_1.registerTreeview)(context);
+    // 3. 下部 Mコード定義用 WebviewViewProvider の登録
+    const provider = new machineWebviewProvider_1.MachineWebviewProvider(context.extensionUri);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(machineWebviewProvider_1.MachineWebviewProvider.viewType, provider));
+    // 4. 各種機能およびコマンドの登録
+    (0, decorator_1.initializeDecorations)(context);
     (0, symbols_1.registerDocumentSymbolProvider)(context);
     (0, hover_1.registerHoverProvider)(context);
-    // コマンド登録に machineDataProvider を渡す
-    (0, commands_1.registerCommands)(context, machineDataProvider);
-    // 2. イベントハンドラの設定
+    // コマンド登録（引数に machineDataProvider と provider の両方を1度だけ渡す）
+    (0, commands_1.registerCommands)(context, machineDataProvider, provider);
+    // ツール番号とH番号の不一致チェック（Diagnostic）の登録
+    (0, diagnostics_1.registerToolCheckDiagnostics)(context);
+    // 3D ビューアの登録（一時停止中）
+    // register3DViewer(context);
+    // 5. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor)
             (0, decorator_1.updateDecorations)();
@@ -42,7 +50,7 @@ function activate(context) {
             (0, decorator_1.updateDecorations)();
         }
     }, null, context.subscriptions);
-    // 3. 設定変更時のイベントハンドラ
+    // 6. 設定変更時のイベントハンドラ
     vscode.workspace.onDidChangeConfiguration(event => {
         if (event.affectsConfiguration('ncCodeHelper')) {
             (0, decorator_1.refreshDecorationStyles)(); // カラー定義を再生成
@@ -50,11 +58,7 @@ function activate(context) {
             colorDataProvider.refresh(); // カラーツリーの再読み込み
         }
     }, null, context.subscriptions);
-    // ツール番号とH番号不一致チェックの登録
-    (0, diagnostics_1.registerToolCheckDiagnostics)(context);
-    // 3D ビューアの登録
-    // register3DViewer(context);
-    // 4. 初回描画
+    // 7. 初回描画の実行
     (0, decorator_1.updateDecorations)();
 }
 function deactivate() { }

@@ -14,19 +14,44 @@ function getStorageMachineFolder(context) {
     if (!fs.existsSync(machineFolder)) {
         fs.mkdirSync(machineFolder, { recursive: true });
     }
+    // 初回起動時、sample.json が存在しなければデフォルトで作成
+    const samplePath = path.join(machineFolder, 'sample.json');
+    if (!fs.existsSync(samplePath)) {
+        const sampleData = {
+            "machine": "sample",
+            "description": "マシニングセンタ用 Mコード",
+            "version": "1.0.0",
+            "mCodes": {
+                "M00": "プログラムストップ",
+                "M01": "オプショナルストップ",
+                "M02": "プログラム終了",
+                "M03": "主軸正転",
+                "M04": "主軸逆転",
+                "M05": "主軸停止",
+                "M06": "工具交換（ATC）",
+                "M08": "クーラント ON",
+                "M09": "クーラント OFF",
+                "M10": "A/C軸クランプ",
+                "M11": "A/C軸アンクランプ",
+                "M30": "プログラム終了（リセット・復帰）",
+                "M100": "センタクーラント ON",
+                "M101": "センタクーラント OFF"
+            }
+        };
+        fs.writeFileSync(samplePath, JSON.stringify(sampleData, null, 2), 'utf8');
+    }
     return machineFolder;
 }
 // ツリービュー（サイドバー）の各ノード要素を表現
 class CategoryTreeItem extends vscode.TreeItem {
-    constructor(label, collapsibleState, category, isEnabled, machineName, isAddButton, isMachineChecked) {
+    constructor(label, collapsibleState, category, isEnabled, machineName, isAddButton) {
         super(label, collapsibleState);
         this.label = label;
         this.collapsibleState = collapsibleState;
         this.category = category;
         this.machineName = machineName;
         this.isAddButton = isAddButton;
-        this.isMachineChecked = isMachineChecked;
-        // 1:新規設備(JSON)追加ボタン
+        // 1: 新規設備(JSON)追加ボタン
         if (isAddButton) {
             this.iconPath = new vscode.ThemeIcon('add');
             this.tooltip = '新しい設備Mコード定義(JSON)を追加';
@@ -36,26 +61,23 @@ class CategoryTreeItem extends vscode.TreeItem {
                 title: 'Add Machine JSON'
             };
         }
-        //　2:NCコード表示色
+        // 2: NCコード表示色カテゴリ
         else if (category) {
             this.iconPath = new vscode.ThemeIcon(category.icon);
             this.tooltip = `${category.label} のハイライト表示切替`;
-            // 有効・無効を切り替えるチェックボックス
+            // カラー設定側は有効・無効切り替え用チェックボックスを保持
             this.checkboxState = isEnabled
                 ? vscode.TreeItemCheckboxState.Checked
                 : vscode.TreeItemCheckboxState.Unchecked;
             this.contextValue = 'categoryItem';
         }
-        // 3:各設備のJSON定義
+        // 3: 各設備のJSON定義（クリック動作を優先するためチェックボックスを排斥）
         else if (machineName) {
             this.iconPath = new vscode.ThemeIcon('wrench');
-            this.tooltip = `クリックして ${machineName}.json を開く`;
+            this.tooltip = `クリックして ${machineName} のMコード一覧を表示`;
             this.contextValue = 'machineItem';
-            // 該当する設備が選択中かどうかをチェックボックスで表示
-            this.checkboxState = isMachineChecked
-                ? vscode.TreeItemCheckboxState.Checked
-                : vscode.TreeItemCheckboxState.Unchecked;
-            // クリック時に該当する設備のJSONファイルを開く
+            // ★ チェックボックス（this.checkboxState）を設定しないことで、
+            // クリック時にチェック処理へ横取りされず確実にコマンドを実行させる
             this.command = {
                 command: 'ncCodeHelper.openMachineJson',
                 title: 'Open Machine JSON',
@@ -85,15 +107,12 @@ class MachineTreeDataProvider {
             return [];
         const folder = getStorageMachineFolder(this.context);
         const items = [];
-        // 保存されているチェック選択済み設備リストを取得
-        const selectedMachines = this.context.globalState.get('selectedMachines', []);
         // 専用フォルダ内の .json ファイルをすべて一覧表示
         if (fs.existsSync(folder)) {
             const files = fs.readdirSync(folder).filter(file => file.endsWith('.json'));
             files.forEach(file => {
                 const machineName = path.basename(file, '.json');
-                const isChecked = selectedMachines.includes(machineName);
-                items.push(new CategoryTreeItem(machineName, vscode.TreeItemCollapsibleState.None, undefined, undefined, machineName, false, isChecked));
+                items.push(new CategoryTreeItem(machineName, vscode.TreeItemCollapsibleState.None, undefined, undefined, machineName, false));
             });
         }
         // 末尾に「新規追加」ボタンを配置

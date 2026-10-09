@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "main": "./out/extension.js",
   "license": "MIT",
   "engines": {
@@ -18,7 +18,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/username/your-repo.git"
+    "url": "https://github.com/matyatyan/nc-code-helper.git"
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -27,12 +27,20 @@
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
-    "@types/three": "^0.186.0",
     "@types/vscode": "^1.80.0",
     "license-checker": "^25.0.1",
     "typescript": "^5.0.0"
   },
   "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "ncCodeHelperPanelContainer",
+          "title": "設備Mコード定義",
+          "icon": "$(list-flat)"
+        }
+      ]
+    },
     "views": {
       "explorer": [
         {
@@ -42,6 +50,22 @@
         {
           "id": "ncCodeHelperCategoryView",
           "name": "NC カラー設定"
+        }
+      ],
+      "ncCodeHelperPanelContainer": [
+        {
+          "type": "webview",
+          "id": "ncCodeHelperMachineDetailView",
+          "name": "設備Mコード一覧"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "ncCodeHelper.openStorageFolder",
+          "when": "view == ncCodeHelperMachinesView",
+          "group": "navigation"
         }
       ]
     },
@@ -114,20 +138,6 @@
         "icon": "$(folder-opened)"
       }
     ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "ncCodeHelper.openStorageFolder",
-          "when": "view == ncCodeHelperMachinesView",
-          "group": "navigation"
-        },
-        {
-          "command": "ncCodeHelper.show3DViewer",
-          "when": "resourceExtname in .nc, .gcode, .nd1, .all, .ALL",
-          "group": "navigation"
-        }
-      ]
-    },
     "configuration": {
       "type": "object",
       "title": "NC Code Helper",
@@ -244,8 +254,5 @@
         }
       }
     }
-  },
-  "dependencies": {
-    "three": "^0.186.1"
   }
 }

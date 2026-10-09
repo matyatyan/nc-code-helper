@@ -8,50 +8,69 @@ const path = require("path");
 const fs = require("fs");
 const treeview_1 = require("./treeview");
 function registerHoverProvider(context) {
-    const provider = vscode.languages.registerHoverProvider([{ scheme: 'file', language: 'nc' }, { scheme: 'file', language: 'gcode' }], {
+    const provider = vscode.languages.registerHoverProvider(['gcode', 'nc'], {
         provideHover(document, position, token) {
-            // 1. Mコードのホバー処理（選択・チェック中設備のMコード定義を出力）
-            const mCodeRange = document.getWordRangeAtPosition(position, /M\d+/i);
+            // 1. Mコードのホバー処理（Mの後に数字が1〜3桁続くパターンを抽出）
+            const mCodeRange = document.getWordRangeAtPosition(position, /M\d{1,3}/i);
             if (mCodeRange) {
-                const code = document.getText(mCodeRange).toUpperCase();
-                const selectedMachines = context.globalState.get('selectedMachines', []);
-                if (selectedMachines.length > 0) {
-                    const folder = (0, treeview_1.getStorageMachineFolder)(context);
-                    const hoverTexts = [];
-                    for (const machineName of selectedMachines) {
-                        const jsonPath = path.join(folder, `${machineName}.json`);
-                        if (fs.existsSync(jsonPath)) {
-                            try {
-                                const rawData = fs.readFileSync(jsonPath, 'utf8');
-                                const data = JSON.parse(rawData);
-                                const mCodes = data.mCodes;
-                                if (mCodes && mCodes[code]) {
-                                    hoverTexts.push(`**${data.machine || machineName}**: ${mCodes[code]}`);
-                                }
-                            }
-                            catch (e) {
-                                // JSONパースエラー時は無視
-                            }
-                        }
-                    }
-                    if (hoverTexts.length > 0) {
-                        const markdown = new vscode.MarkdownString();
-                        markdown.appendMarkdown(`**${code}**\n\n`);
-                        markdown.appendMarkdown(hoverTexts.join('\n\n'));
-                        return new vscode.Hover(markdown, mCodeRange);
+                const rawCode = document.getText(mCodeRange).toUpperCase(); // 例: "M6" または "M06"
+                // 2桁以下の数値Mコードは "M06" のように2桁ゼロ埋め表現の候補も作成
+                const numMatch = rawCode.match(/^M(\d+)$/i);
+                const codeVariants = [rawCode];
+                if (numMatch) {
+                    const num = parseInt(numMatch[1], 10);
+                    const paddedCode = `M${num.toString().padStart(2, '0')}`; // "M6" -> "M06"
+                    if (!codeVariants.includes(paddedCode)) {
+                        codeVariants.push(paddedCode);
                     }
                 }
+                // activeMachine または selectedMachines から対象設備を取得
+                const selectedMachines = context.globalState.get('selectedMachines', []);
+                const activeMachine = context.globalState.get('activeMachine', 'sample');
+                const targetMachines = selectedMachines.length > 0
+                    ? selectedMachines
+                    : [activeMachine];
+                const folder = (0, treeview_1.getStorageMachineFolder)(context);
+                const hoverTexts = [];
+                for (const machineName of targetMachines) {
+                    const jsonPath = path.join(folder, `${machineName}.json`);
+                    if (fs.existsSync(jsonPath)) {
+                        try {
+                            const rawData = fs.readFileSync(jsonPath, 'utf8');
+                            const data = JSON.parse(rawData);
+                            const mCodes = data.mCodes;
+                            if (mCodes) {
+                                // M06 または M6 のどちらの形式でJSONに入っていてもヒットさせる
+                                for (const variant of codeVariants) {
+                                    if (mCodes[variant]) {
+                                        hoverTexts.push(`**${data.machine || machineName}**: ${mCodes[variant]}`);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        catch (e) {
+                            // JSONパースエラー時は無視
+                        }
+                    }
+                }
+                if (hoverTexts.length > 0) {
+                    const markdown = new vscode.MarkdownString();
+                    markdown.appendMarkdown(`**${rawCode}**\n\n`);
+                    markdown.appendMarkdown(hoverTexts.join('\n\n'));
+                    return new vscode.Hover(markdown, mCodeRange);
+                }
             }
-            // 2. マクロ変数（#100, #500 等）の代入値ホバー処理（同一O番号ブロック内限定）
+            // 2. マクロ変数（#100, #500 等）の代入値ホバー処理
             const macroRange = document.getWordRangeAtPosition(position, /#\d+/);
             if (macroRange) {
-                const varName = document.getText(macroRange); // 例: "#500"
+                const varName = document.getText(macroRange);
                 const currentLine = position.line;
-                // カーソル位置から上に遡り、直近の O番号（プログラム開始行）の行番号を探す
+                // カーソル位置から上に遡り、直近の O番号（プログラム開始行）を探す
                 let startLine = 0;
                 for (let i = currentLine; i >= 0; i--) {
                     const lineText = document.lineAt(i).text;
-                    const codePart = lineText.split('(')[0]; // コメント除外
+                    const codePart = lineText.split('(')[0];
                     if (/O\d+/i.test(codePart)) {
                         startLine = i;
                         break;
@@ -59,22 +78,20 @@ function registerHoverProvider(context) {
                 }
                 let assignedValue = undefined;
                 let foundLine = undefined;
-                // 変数への代入文判定用正規表現（例: #500=10.5 や #100 = #100 + 1）
                 const assignRegex = new RegExp(`^\\s*${varName.replace('#', '\\#')}\\s*=\\s*(.+)`, 'i');
-                // 同じO番号ブロックの先頭（startLine）から現在行（currentLine）までスキャン
                 for (let i = startLine; i <= currentLine; i++) {
                     const lineText = document.lineAt(i).text;
                     const codePart = lineText.split('(')[0];
                     const match = codePart.match(assignRegex);
                     if (match) {
                         assignedValue = match[1].trim();
-                        foundLine = i + 1; // 1行ベースの行番号
+                        foundLine = i + 1;
                     }
                 }
                 const markdown = new vscode.MarkdownString();
                 markdown.appendMarkdown(`**マクロ変数** ${varName}\n\n`);
                 if (assignedValue !== undefined && foundLine !== undefined) {
-                    markdown.appendMarkdown(`**値**: \`${assignedValue}\`` + `*(L${foundLine} 行目で設定)*`);
+                    markdown.appendMarkdown(`**値**: \`${assignedValue}\` ` + `*(L${foundLine} 行目で設定)*`);
                 }
                 else {
                     markdown.appendMarkdown(`*NULL*`);
