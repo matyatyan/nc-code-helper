@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "main": "./out/extension.js",
   "license": "MIT",
   "engines": {
@@ -36,7 +36,7 @@
       "panel": [
         {
           "id": "ncCodeHelperPanelContainer",
-          "title": "設備Mコード定義",
+          "title": "設備状態",
           "icon": "$(list-flat)"
         }
       ]
@@ -56,7 +56,7 @@
         {
           "type": "webview",
           "id": "ncCodeHelperMachineDetailView",
-          "name": "設備Mコード一覧"
+          "name": "設備状態"
         }
       ]
     },

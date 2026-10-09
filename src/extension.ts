@@ -51,12 +51,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 5. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
+        provider.updateProgramState(editor);
         if (editor) updateDecorations();
+    }, null, context.subscriptions);
+
+    vscode.window.onDidChangeTextEditorSelection(event => {
+        provider.updateProgramState(event.textEditor);
     }, null, context.subscriptions);
 
     vscode.workspace.onDidChangeTextDocument(event => {
         if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
             updateDecorations();
+            provider.updateProgramState(vscode.window.activeTextEditor);
         }
     }, null, context.subscriptions);
 
@@ -70,6 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
     }, null, context.subscriptions);
 
     // 7. 初回描画の実行
+    provider.updateProgramState(vscode.window.activeTextEditor);
     updateDecorations();
 }
 

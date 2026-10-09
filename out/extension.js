@@ -42,12 +42,17 @@ function activate(context) {
     // register3DViewer(context);
     // 5. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
+        provider.updateProgramState(editor);
         if (editor)
             (0, decorator_1.updateDecorations)();
+    }, null, context.subscriptions);
+    vscode.window.onDidChangeTextEditorSelection(event => {
+        provider.updateProgramState(event.textEditor);
     }, null, context.subscriptions);
     vscode.workspace.onDidChangeTextDocument(event => {
         if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
             (0, decorator_1.updateDecorations)();
+            provider.updateProgramState(vscode.window.activeTextEditor);
         }
     }, null, context.subscriptions);
     // 6. 設定変更時のイベントハンドラ
@@ -59,6 +64,7 @@ function activate(context) {
         }
     }, null, context.subscriptions);
     // 7. 初回描画の実行
+    provider.updateProgramState(vscode.window.activeTextEditor);
     (0, decorator_1.updateDecorations)();
 }
 function deactivate() { }

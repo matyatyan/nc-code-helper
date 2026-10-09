@@ -64,7 +64,7 @@ function updateDiagnostics(document, collection) {
                     // 元の行文字列から正確な Hコードの出現位置を取得
                     const hIndex = line.text.indexOf(match[0], match.index);
                     const range = new vscode.Range(new vscode.Position(i, hIndex), new vscode.Position(i, hIndex + match[0].length));
-                    const diagnostic = new vscode.Diagnostic(range, `【注意】主軸工具 (T${spindleTool}) と工具長補正番号 (${match[0]}) が一致していません。`, vscode.DiagnosticSeverity.Warning);
+                    const diagnostic = new vscode.Diagnostic(range, `【注意】主軸工具 (T${spindleTool}) と工具長補正 (${match[0]}) が一致していません。`, vscode.DiagnosticSeverity.Warning);
                     diagnostic.source = 'NC Tool Checker';
                     diagnostics.push(diagnostic);
                 }

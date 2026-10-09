@@ -10,63 +10,71 @@ const treeview_1 = require("./treeview");
 function registerHoverProvider(context) {
     const provider = vscode.languages.registerHoverProvider(['gcode', 'nc'], {
         provideHover(document, position, token) {
-            // 1. Mコードのホバー処理（Mの後に数字が1〜3桁続くパターンを抽出）
-            const mCodeRange = document.getWordRangeAtPosition(position, /M\d{1,3}/i);
-            if (mCodeRange) {
-                const rawCode = document.getText(mCodeRange).toUpperCase(); // 例: "M6" または "M06"
-                // 2桁以下の数値Mコードは "M06" のように2桁ゼロ埋め表現の候補も作成
-                const numMatch = rawCode.match(/^M(\d+)$/i);
-                const codeVariants = [rawCode];
-                if (numMatch) {
-                    const num = parseInt(numMatch[1], 10);
-                    const paddedCode = `M${num.toString().padStart(2, '0')}`; // "M6" -> "M06"
-                    if (!codeVariants.includes(paddedCode)) {
-                        codeVariants.push(paddedCode);
+            const lineText = document.lineAt(position.line).text;
+            const character = position.character;
+            // 1. Mコードのホバー処理（スペースなしで連結しているケースに対応）
+            // 例: M06X0Y0 や M07M08 の中からカーソル位置の Mコードを検出
+            const mCodeRegex = /M\d+/gi;
+            let match;
+            while ((match = mCodeRegex.exec(lineText)) !== null) {
+                const start = match.index;
+                const end = start + match[0].length;
+                // カーソル位置がこの Mコードの範囲内にあるか判定
+                if (character >= start && character < end) {
+                    const rawCode = match[0].toUpperCase(); // 例: "M6" または "M06"
+                    const mCodeRange = new vscode.Range(new vscode.Position(position.line, start), new vscode.Position(position.line, end));
+                    // 2桁ゼロ埋めの変形候補（"M6" -> "M06"）を作成
+                    const numMatch = rawCode.match(/^M(\d+)$/i);
+                    const codeVariants = [rawCode];
+                    if (numMatch) {
+                        const num = parseInt(numMatch[1], 10);
+                        for (const variant of [
+                            `M${num.toString()}`,
+                            `M${num.toString().padStart(2, '0')}`
+                        ]) {
+                            if (!codeVariants.includes(variant)) {
+                                codeVariants.push(variant);
+                            }
+                        }
                     }
-                }
-                // activeMachine または selectedMachines から対象設備を取得
-                const selectedMachines = context.globalState.get('selectedMachines', []);
-                const activeMachine = context.globalState.get('activeMachine', 'sample');
-                const targetMachines = selectedMachines.length > 0
-                    ? selectedMachines
-                    : [activeMachine];
-                const folder = (0, treeview_1.getStorageMachineFolder)(context);
-                const hoverTexts = [];
-                for (const machineName of targetMachines) {
-                    const jsonPath = path.join(folder, `${machineName}.json`);
+                    // 設備一覧で最後に選択した設備だけをホバー対象にする
+                    const activeMachine = context.globalState.get('activeMachine', 'sample');
+                    const folder = (0, treeview_1.getStorageMachineFolder)(context);
+                    const hoverTexts = [];
+                    const jsonPath = path.join(folder, `${activeMachine}.json`);
                     if (fs.existsSync(jsonPath)) {
                         try {
                             const rawData = fs.readFileSync(jsonPath, 'utf8');
                             const data = JSON.parse(rawData);
                             const mCodes = data.mCodes;
-                            if (mCodes) {
-                                // M06 または M6 のどちらの形式でJSONに入っていてもヒットさせる
+                            if (mCodes && typeof mCodes === 'object') {
+                                const entries = Object.entries(mCodes);
                                 for (const variant of codeVariants) {
-                                    if (mCodes[variant]) {
-                                        hoverTexts.push(`**${data.machine || machineName}**: ${mCodes[variant]}`);
+                                    const entry = entries.find(([code]) => code.toUpperCase() === variant);
+                                    if (entry && typeof entry[1] === 'string' && entry[1].length > 0) {
+                                        hoverTexts.push(`**${data.machine || activeMachine}**: ${entry[1]}`);
                                         break;
                                     }
                                 }
                             }
                         }
                         catch (e) {
-                            // JSONパースエラー時は無視
+                            console.error(`Failed to read M-code definitions from ${jsonPath}:`, e);
                         }
                     }
-                }
-                if (hoverTexts.length > 0) {
-                    const markdown = new vscode.MarkdownString();
-                    markdown.appendMarkdown(`**${rawCode}**\n\n`);
-                    markdown.appendMarkdown(hoverTexts.join('\n\n'));
-                    return new vscode.Hover(markdown, mCodeRange);
+                    if (hoverTexts.length > 0) {
+                        const markdown = new vscode.MarkdownString();
+                        markdown.appendMarkdown(`**${rawCode}**\n\n`);
+                        markdown.appendMarkdown(hoverTexts.join('\n\n'));
+                        return new vscode.Hover(markdown, mCodeRange);
+                    }
                 }
             }
-            // 2. マクロ変数（#100, #500 等）の代入値ホバー処理
+            // 2. マクロ変数（#100, #500 等）の代入値ホバー処理（同一O番号ブロック内限定）
             const macroRange = document.getWordRangeAtPosition(position, /#\d+/);
             if (macroRange) {
                 const varName = document.getText(macroRange);
                 const currentLine = position.line;
-                // カーソル位置から上に遡り、直近の O番号（プログラム開始行）を探す
                 let startLine = 0;
                 for (let i = currentLine; i >= 0; i--) {
                     const lineText = document.lineAt(i).text;

@@ -82,7 +82,7 @@ function updateDiagnostics(document: vscode.TextDocument, collection: vscode.Dia
 
                     const diagnostic = new vscode.Diagnostic(
                         range,
-                        `【注意】主軸工具 (T${spindleTool}) と工具長補正番号 (${match[0]}) が一致していません。`,
+                        `【注意】主軸工具 (T${spindleTool}) と工具長補正 (${match[0]}) が一致していません。`,
                         vscode.DiagnosticSeverity.Warning
                     );
                     diagnostic.source = 'NC Tool Checker';
