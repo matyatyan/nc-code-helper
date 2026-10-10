@@ -218,24 +218,52 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         margin: 0 0 10px;
                         font-size: 0.9em;
                     }
+                    html, body {
+                        height: 100%;
+                    }
+                    body {
+                        display: flex;
+                        min-height: 0;
+                    }
                     .content {
                         display: grid;
                         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                         min-height: 150px;
+                        width: 100%;
+                        height: 100%;
+                        min-height: 0;
                     }
                     .definitions {
                         min-width: 0;
+                        min-height: 0;
                         padding-right: 12px;
+                        overflow-y: auto;
                     }
                     .program-state {
                         border-left: 1px solid var(--vscode-widget-border);
-                        padding: 10px 0 10px 16px;
+                        padding: 0 0 10px 16px;
+                        min-width: 0;
+                        min-height: 0;
+                        overflow-y: auto;
                     }
-                    .program-state p {
+                    .program-state p,
+                    .program-state .double-value .field {
                         display: grid;
-                        grid-template-columns: 9em 1em minmax(0, 1fr);
+                        grid-template-columns: 6.6em 0.6em minmax(0, 1fr);
+                        column-gap: 2px;
                         margin: 0 0 8px;
                         font-size: 1em;
+                    }
+                    .program-state .double-value {
+                        display: grid;
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                        column-gap: 10px;
+                        row-gap: 8px;
+                        margin: 0 0 8px;
+                        align-items: start;
+                    }
+                    .program-state .double-value .field {
+                        min-width: 0;
                     }
                     table {
                         width: 100%;
@@ -280,13 +308,18 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         </table>
                     </section>
                     <section class="program-state" aria-label="カーソル位置のプログラム状態">
+                        <h1>加工条件データ</h1>
                         <p><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
                         <p><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
-                        <p><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
-                        <p><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        <div class="double-value" aria-label="工具補正">
+                            <p class="field"><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
+                            <p class="field"><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        </div>
                         <p><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
-                        <p><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
-                        <p><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                        <div class="double-value" aria-label="回転・送り">
+                            <p class="field"><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                            <p class="field"><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
+                        </div>
                     </section>
                 </div>
                 <script>
@@ -453,23 +486,53 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         background-color: var(--vscode-editor-backgroundColor);
                         font-family: var(--vscode-font-family);
                     }
+                    html, body {
+                        height: 100%;
+                    }
+                    body {
+                        display: flex;
+                        min-height: 0;
+                    }
+                    h1 {
+                        font-size: 1.1em;
+                        margin-top: 0;
+                        margin-bottom: 4px;
+                        border-bottom: 1px solid var(--vscode-panel-border);
+                        padding-bottom: 4px;
+                    }
                     .content {
                         display: grid;
                         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
                         min-height: 150px;
+                        width: 100%;
+                        height: 100%;
+                        min-height: 0;
                     }
                     .message {
                         color: var(--vscode-descriptionForeground);
                     }
                     .program-state {
                         border-left: 1px solid var(--vscode-widget-border);
-                        padding: 10px 0 10px 16px;
+                        padding: 0 0 10px 16px;
                     }
-                    .program-state p {
+                    .program-state p,
+                    .program-state .double-value .field {
                         display: grid;
-                        grid-template-columns: 9em 1em minmax(0, 1fr);
+                        grid-template-columns: 6.6em 0.6em minmax(0, 1fr);
+                        column-gap: 2px;
                         margin: 0 0 8px;
                         font-size: 1em;
+                    }
+                    .program-state .double-value {
+                        display: grid;
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                        column-gap: 10px;
+                        row-gap: 8px;
+                        margin: 0 0 8px;
+                        align-items: start;
+                    }
+                    .program-state .double-value .field {
+                        min-width: 0;
                     }
                 </style>
             </head>
@@ -479,13 +542,18 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         <p>設備を選択すると Mコード一覧が表示されます。</p>
                     </section>
                     <section class="program-state" aria-label="カーソル位置のプログラム状態">
+                        <h1>加工条件データ</h1>
                         <p><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
                         <p><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
-                        <p><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
-                        <p><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        <div class="double-value" aria-label="工具補正">
+                            <p class="field"><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
+                            <p class="field"><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        </div>
                         <p><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
-                        <p><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
-                        <p><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                        <div class="double-value" aria-label="回転・送り">
+                            <p class="field"><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                            <p class="field"><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
+                        </div>
                     </section>
                 </div>
                 <script>
