@@ -1,23 +1,27 @@
-// 主軸工具と待機工具の検出・主軸工具番号と補正番号の照合
+// NCコードの値と主軸工具・工具長補正番号を検証
 import * as vscode from 'vscode';
-import { isNcDocument } from './utils'; 
+import { MachineWebviewProvider } from './machineWebviewProvider';
+import { isNcDocument } from './utils';
 
-export function registerToolCheckDiagnostics(context: vscode.ExtensionContext) {
-    const diagnosticCollection = vscode.languages.createDiagnosticCollection('ncToolCheck');
+export function registerNcDiagnostics(
+    context: vscode.ExtensionContext,
+    programStateProvider: MachineWebviewProvider
+) {
+    const diagnosticCollection = vscode.languages.createDiagnosticCollection('ncCodeChecks');
     context.subscriptions.push(diagnosticCollection);
 
     if (vscode.window.activeTextEditor) {
-        updateDiagnostics(vscode.window.activeTextEditor.document, diagnosticCollection);
+        updateDiagnostics(vscode.window.activeTextEditor.document, diagnosticCollection, programStateProvider);
     }
 
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(editor => {
             if (editor) {
-                updateDiagnostics(editor.document, diagnosticCollection);
+                updateDiagnostics(editor.document, diagnosticCollection, programStateProvider);
             }
         }),
         vscode.workspace.onDidChangeTextDocument(event => {
-            updateDiagnostics(event.document, diagnosticCollection);
+            updateDiagnostics(event.document, diagnosticCollection, programStateProvider);
         }),
         vscode.workspace.onDidCloseTextDocument(doc => {
             diagnosticCollection.delete(doc.uri);
@@ -25,70 +29,105 @@ export function registerToolCheckDiagnostics(context: vscode.ExtensionContext) {
     );
 }
 
-function updateDiagnostics(document: vscode.TextDocument, collection: vscode.DiagnosticCollection) {
-    // 拡張子およびプログラム内容による判定
+function updateDiagnostics(
+    document: vscode.TextDocument,
+    collection: vscode.DiagnosticCollection,
+    programStateProvider: MachineWebviewProvider
+) {
     if (!isNcDocument(document)) {
         collection.delete(document.uri);
         return;
     }
-    const validExtensions = ['.nc', '.gcode', '.nd1', '.all'];
-    const ext = document.fileName.substring(document.fileName.lastIndexOf('.')).toLowerCase();
-    
-    if (!validExtensions.includes(ext) && document.languageId !== 'gcode' && document.languageId !== 'nc') {
-        return;
-    }
 
     const diagnostics: vscode.Diagnostic[] = [];
-
-    let spindleTool: number | null = null; // 主軸工具
-    let waitingTool: number | null = null; // 待機工具
+    const programStates = programStateProvider.getProgramStates(document);
 
     for (let i = 0; i < document.lineCount; i++) {
         const line = document.lineAt(i);
-        // コメント（かっこ内）を除外
-        const codeText = line.text.split('(')[0].trim();
-        if (!codeText) continue;
+        const codeText = line.text
+            .replace(/\([^)]*(?:\)|$)/g, comment => ' '.repeat(comment.length))
+            .split(';', 1)[0];
 
-        // --- 1. 行頭の Tコード判定 ---
-        // 先頭の記号（%等）や空白をスキップし、行頭の T1, T01, T101 を取得
-        const leadingTMatch = codeText.match(/^%?\s*T(\d+)/i);
-        if (leadingTMatch) {
-            waitingTool = parseInt(leadingTMatch[1], 10);
-        }
-
-        // --- 2. M06判定（ツール交換） ---
-        // スペースの有無を問わず M06 または M6 を判定
-        if (/M0?6(?!\d)/i.test(codeText)) {
-            if (waitingTool !== null) {
-                spindleTool = waitingTool;
+        for (const match of codeText.matchAll(/([ABCXYZ])([^A-Z\s]*)/gi)) {
+            if (match.index === undefined ||
+                /[A-Z]/i.test(codeText[match.index - 1] ?? '')) {
+                continue;
             }
-        }
 
-        // --- 3. Hコードの照合判定 ---
-        // スペースなし（G43H01等）や英字連記でも H番号 を抽出
-        const hMatches = [...codeText.matchAll(/H(\d+)/gi)];
-        for (const match of hMatches) {
-            if (match.index !== undefined) {
-                const hNumber = parseInt(match[1], 10);
+            const valueStart = match.index + match[1].length;
+            let value = match[2];
+            let valueEnd = match.index + match[0].length;
 
-                // 主軸ツールがセットされており、かつ工具番号と補正番号が一致しない場合
-                if (spindleTool !== null && spindleTool !== hNumber) {
-                    // 元の行文字列から正確な Hコードの出現位置を取得
-                    const hIndex = line.text.indexOf(match[0], match.index);
-                    const range = new vscode.Range(
-                        new vscode.Position(i, hIndex),
-                        new vscode.Position(i, hIndex + match[0].length)
-                    );
-
-                    const diagnostic = new vscode.Diagnostic(
-                        range,
-                        `【注意】主軸工具 (T${spindleTool}) と工具長補正 (${match[0]}) が一致していません。`,
-                        vscode.DiagnosticSeverity.Warning
-                    );
-                    diagnostic.source = 'NC Tool Checker';
-                    diagnostics.push(diagnostic);
+            if (codeText[valueStart] === '[') {
+                const closingBracket = codeText.indexOf(']', valueStart + 1);
+                if (closingBracket !== -1) {
+                    value = codeText.slice(valueStart, closingBracket + 1);
+                    valueEnd = closingBracket + 1;
                 }
             }
+
+            if (/^#\d+$/.test(value) || /^\[[^\]]+\]$/.test(value)) {
+                continue;
+            }
+
+            const range = new vscode.Range(
+                new vscode.Position(i, match.index),
+                new vscode.Position(i, valueEnd)
+            );
+            const numericLiteral = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value);
+
+            if (!numericLiteral || !Number.isFinite(Number(value))) {
+                const diagnostic = new vscode.Diagnostic(
+                    range,
+                    `【エラー】${match[1].toUpperCase()} の値「${value}」を数値として認識できません。`,
+                    vscode.DiagnosticSeverity.Error
+                );
+                diagnostic.source = 'NC Code Helper';
+                diagnostics.push(diagnostic);
+                continue;
+            }
+
+            if (Number(value) !== 0 && !value.includes('.')) {
+                const diagnostic = new vscode.Diagnostic(
+                    range,
+                    `【注意】${match[1].toUpperCase()} の値「${value}」に小数点がありません。`,
+                    vscode.DiagnosticSeverity.Warning
+                );
+                diagnostic.source = 'NC Code Helper';
+                diagnostics.push(diagnostic);
+            }
+        }
+
+        const state = programStates[i];
+        const spindleTool = Number(state.spindleTool.match(/^T(\d+)$/i)?.[1]);
+        const toolLengthOffset = Number(state.toolLengthOffset.match(/^H(\d+)$/i)?.[1]);
+
+        if (!Number.isFinite(spindleTool) || !Number.isFinite(toolLengthOffset) ||
+            spindleTool === toolLengthOffset) {
+            continue;
+        }
+
+        for (const match of codeText.matchAll(/H(\d+)/gi)) {
+            if (match.index === undefined) {
+                continue;
+            }
+
+            if (Number(match[1]) !== toolLengthOffset) {
+                continue;
+            }
+
+            const hIndex = match.index;
+            const range = new vscode.Range(
+                new vscode.Position(i, hIndex),
+                new vscode.Position(i, hIndex + match[0].length)
+            );
+            const diagnostic = new vscode.Diagnostic(
+                range,
+                `【注意】使用工具 (${state.spindleTool}) と工具長補正 (${state.toolLengthOffset}) が一致していません。`,
+                vscode.DiagnosticSeverity.Warning
+            );
+            diagnostic.source = 'NC Code Helper';
+            diagnostics.push(diagnostic);
         }
     }
 

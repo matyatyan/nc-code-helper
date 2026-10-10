@@ -4,26 +4,43 @@ import { registerDocumentSymbolProvider } from './symbols';
 import { initializeDecorations, updateDecorations, refreshDecorationStyles } from './decorator';
 import { registerHoverProvider } from './hover';
 import { registerCommands } from './commands';
-import { registerToolCheckDiagnostics } from './diagnostics';
+import { registerNcDiagnostics } from './diagnostics';
 import { isNcDocument } from './utils';
 import { MachineWebviewProvider } from './machineWebviewProvider'; // ★ import を追加
+
+function trySetNcLanguage(doc: vscode.TextDocument): void {
+    if (!doc || doc.languageId === 'gcode' || doc.languageId === 'nc') {
+        return;
+    }
+
+    try {
+        if (isNcDocument(doc)) {
+            void vscode.languages.setTextDocumentLanguage(doc, 'gcode').then(
+                changedDocument => {
+                    const activeEditor = vscode.window.activeTextEditor;
+                    if (activeEditor?.document === changedDocument) {
+                        updateDecorations();
+                    }
+                },
+                error => console.error('[NC Code Helper] Failed to set document language.', error)
+            );
+        }
+    } catch (error) {
+        console.error('[NC Code Helper] Failed to detect or set document language.', error);
+    }
+}
 
 export function activate(context: vscode.ExtensionContext) {
     // 1. NCファイル自動判定＆言語ID設定
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(doc => {
-            if (doc.languageId !== 'gcode' && isNcDocument(doc)) {
-                vscode.languages.setTextDocumentLanguage(doc, 'gcode');
-            }
+            trySetNcLanguage(doc);
         })
     );
 
     // 起動時にすでに開かれているアクティブエディタもチェック
     if (vscode.window.activeTextEditor) {
-        const doc = vscode.window.activeTextEditor.document;
-        if (doc.languageId !== 'gcode' && isNcDocument(doc)) {
-            vscode.languages.setTextDocumentLanguage(doc, 'gcode');
-        }
+        trySetNcLanguage(vscode.window.activeTextEditor.document);
     }
 
     // 2. ツリービューの登録（DataProvider の取得）
@@ -43,26 +60,38 @@ export function activate(context: vscode.ExtensionContext) {
     // コマンド登録（引数に machineDataProvider と provider の両方を1度だけ渡す）
     registerCommands(context, machineDataProvider, provider);
 
-    // ツール番号とH番号の不一致チェック（Diagnostic）の登録
-    registerToolCheckDiagnostics(context);
+    // NCコードの値とツール番号・H番号の診断を登録
+    registerNcDiagnostics(context, provider);
 
     // 3D ビューアの登録（一時停止中）
     // register3DViewer(context);
 
     // 5. イベントハンドラの設定
     vscode.window.onDidChangeActiveTextEditor(editor => {
-        provider.updateProgramState(editor);
-        if (editor) updateDecorations();
+        try {
+            provider.updateProgramState(editor);
+            if (editor) updateDecorations();
+        } catch (error) {
+            console.error('[NC Code Helper] Failed to update active editor state.', error);
+        }
     }, null, context.subscriptions);
 
     vscode.window.onDidChangeTextEditorSelection(event => {
-        provider.updateProgramState(event.textEditor);
+        try {
+            provider.updateProgramState(event.textEditor);
+        } catch (error) {
+            console.error('[NC Code Helper] Failed to update state after cursor movement.', error);
+        }
     }, null, context.subscriptions);
 
     vscode.workspace.onDidChangeTextDocument(event => {
-        if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
-            updateDecorations();
-            provider.updateProgramState(vscode.window.activeTextEditor);
+        try {
+            if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
+                updateDecorations();
+                provider.updateProgramState(vscode.window.activeTextEditor);
+            }
+        } catch (error) {
+            console.error('[NC Code Helper] Failed to update after document change.', error);
         }
     }, null, context.subscriptions);
 

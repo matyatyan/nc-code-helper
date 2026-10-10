@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { isNcDocument } from './utils';
 
-interface ProgramState {
+export interface ProgramState {
     coordinateSystem: string;
     spindleTool: string;
     toolLengthOffset: string;
@@ -140,14 +140,24 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     public updateProgramState(editor?: vscode.TextEditor): void {
-        this._programState = editor && isNcDocument(editor.document)
-            ? this._getProgramState(editor.document, editor.selection.active)
-            : { ...emptyProgramState };
+        try {
+            this._programState = editor && isNcDocument(editor.document)
+                ? this.getProgramState(editor.document, editor.selection.active)
+                : { ...emptyProgramState };
+        } catch (error) {
+            console.error('[NC Code Helper] Failed to parse the active program state.', error);
+            this._programState = { ...emptyProgramState };
+        }
 
-        this._view?.webview.postMessage({
-            type: 'programState',
-            state: this._programState
-        });
+        if (this._view) {
+            void this._view.webview.postMessage({
+                type: 'programState',
+                state: this._programState
+            }).then(
+                undefined,
+                error => console.error('[NC Code Helper] Failed to send program state to the webview.', error)
+            );
+        }
     }
 
     /**
@@ -293,8 +303,13 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
         `;
     }
 
-    private _getProgramState(document: vscode.TextDocument, position: vscode.Position): ProgramState {
+    public getProgramState(document: vscode.TextDocument, position: vscode.Position): ProgramState {
+        return this.getProgramStates(document, position.line)[position.line] ?? { ...emptyProgramState };
+    }
+
+    public getProgramStates(document: vscode.TextDocument, throughLine = document.lineCount - 1): ProgramState[] {
         const state: ProgramState = { ...emptyProgramState };
+        const states: ProgramState[] = [];
         let requestedTool: string | undefined;
         let spindleTool: string | undefined;
         let magazineTool: string | undefined;
@@ -307,7 +322,7 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
         let toolDiameterCompensationCancelled = false;
         const macroVariables = new Map<number, number>();
 
-        for (let lineNumber = 0; lineNumber <= position.line; lineNumber++) {
+        for (let lineNumber = 0; lineNumber <= throughLine; lineNumber++) {
             const line = document.lineAt(lineNumber).text;
             const source = line;
             const commentFreeLine = source
@@ -404,20 +419,24 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         break;
                 }
             }
+
+            states.push({
+                ...state,
+                coordinateSystem: coordinateSystemParameter
+                    ? `${state.coordinateSystem} ${coordinateSystemParameter}`
+                    : state.coordinateSystem,
+                spindleTool: spindleTool ?? '未検出',
+                magazineTool: magazineTool ?? '未検出',
+                toolLengthOffset: toolLengthCompensationActive
+                    ? toolLengthOffset ?? '未検出'
+                    : toolLengthCompensationCancelled ? 'なし' : '未検出',
+                toolDiameterOffset: toolDiameterCompensationActive
+                    ? toolDiameterOffset ?? '未検出'
+                    : toolDiameterCompensationCancelled ? 'なし' : '未検出'
+            });
         }
 
-        if (coordinateSystemParameter) {
-            state.coordinateSystem += ` ${coordinateSystemParameter}`;
-        }
-        state.spindleTool = spindleTool ?? '未検出';
-        state.magazineTool = magazineTool ?? '未検出';
-        state.toolLengthOffset = toolLengthCompensationActive
-            ? toolLengthOffset ?? '未検出'
-            : toolLengthCompensationCancelled ? 'なし' : '未検出';
-        state.toolDiameterOffset = toolDiameterCompensationActive
-            ? toolDiameterOffset ?? '未検出'
-            : toolDiameterCompensationCancelled ? 'なし' : '未検出';
-        return state;
+        return states;
     }
 
     private _getInitialHtml(): string {

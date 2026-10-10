@@ -2,6 +2,14 @@
 .vscode-test/**
 .gitignore
 vsc-extension-quickstart.md
+src/**
+out/**
+!out/extension.js
+node_modules/**
+package-lock.json
+tsconfig.json
+licenses.json
+.license-checker-format.json
 
 # viewer3d 機能のプログラムを除外
 src/viewer3d.ts

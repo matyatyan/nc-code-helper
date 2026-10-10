@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.0.9",
+  "version": "0.1.1",
   "main": "./out/extension.js",
   "license": "MIT",
   "engines": {
@@ -22,12 +22,14 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "compile": "tsc --noEmit -p ./ && esbuild src/extension.ts --bundle --platform=node --target=node16 --format=cjs --external:vscode --minify --outfile=out/extension.js",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --target=node16 --format=cjs --external:vscode --minify --outfile=out/extension.js --watch",
+    "licenses:dev": "license-checker --development --relativeLicensePath --customPath .license-checker-format.json --json --out licenses.json"
   },
   "devDependencies": {
     "@types/node": "^18.19.130",
     "@types/vscode": "^1.80.0",
+    "esbuild": "^0.28.2",
     "license-checker": "^25.0.1",
     "typescript": "^5.0.0"
   },
