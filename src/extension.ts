@@ -7,6 +7,7 @@ import { registerCommands } from './commands';
 import { registerNcDiagnostics } from './diagnostics';
 import { isNcDocument } from './utils';
 import { MachineWebviewProvider } from './machineWebviewProvider'; // ★ import を追加
+import { registerSequenceTimeHints } from './sequenceTime';
 
 function trySetNcLanguage(doc: vscode.TextDocument): void {
     if (!doc || doc.languageId === 'gcode' || doc.languageId === 'nc') {
@@ -55,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 4. 各種機能およびコマンドの登録
     initializeDecorations(context);
     registerDocumentSymbolProvider(context);
+    registerSequenceTimeHints(context);
     registerHoverProvider(context);
     
     // コマンド登録（引数に machineDataProvider と provider の両方を1度だけ渡す）

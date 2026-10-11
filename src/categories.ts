@@ -2,7 +2,8 @@
 import { CategoryConfig } from './types';
 
 export const categories: CategoryConfig[] = [
-    { key: 'enableOColor', colorKey: 'colorO', label: 'O (プログラム番号)', icon: 'symbol-class', regex: /[Oo]\d+/g, defaultColor: '#FF1744' },
+
+    { key: 'enableOColor', colorKey: 'colorO', label: 'O (プログラム番号)', icon: 'symbol-class', regex: /\b[Oo]\d+/g, defaultColor: '#FF1744' },
     { key: 'enableNColor', colorKey: 'colorN', label: 'N (シーケンス番号)', icon: 'symbol-number', regex: /[Nn]\d+/g, defaultColor: '#df8337' },
     { key: 'enableGColor', colorKey: 'colorG', label: 'G (準備機能)', icon: 'gear', regex: /[Gg](\d+(\.\d+)?|#\d+|#\[[^\]]+\])/g, defaultColor: '#ffa8db' },
     { key: 'enableMColor', colorKey: 'colorM', label: 'M (補助機能)', icon: 'tools', regex: /[Mm](\d+|#\d+|#\[[^\]]+\])/g, defaultColor: '#eaadfc' },
@@ -16,7 +17,7 @@ export const categories: CategoryConfig[] = [
         colorKey: 'colorMacro',
         label: 'MACRO (マクロ機能・制御文)', 
         icon: 'symbol-variable', 
-        regex: /#\d+|#\[[^\]]+\]|\b(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)\b/gi, 
+        regex: /#\d+|#\[[^\]]+\]|(?<![A-Z])(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)(?![A-Z])/gi,
         defaultColor: '#e040fb' 
     }
 ];

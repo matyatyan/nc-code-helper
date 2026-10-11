@@ -4,6 +4,15 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getStorageMachineFolder } from './treeview';
+import { updateMacroVariablesFromLine } from './macroExpression';
+
+function isProgramBlockStart(lineText: string): boolean {
+    const codePart = lineText
+        .replace(/\([^)]*(?:\)|$)/g, '')
+        .split(';', 1)[0];
+
+    return /(?:^|\s)O\d{3,5}(?=\s|$)/i.test(codePart);
+}
 
 export function registerHoverProvider(context: vscode.ExtensionContext) {
     const provider = vscode.languages.registerHoverProvider(
@@ -91,8 +100,7 @@ export function registerHoverProvider(context: vscode.ExtensionContext) {
                     let startLine = 0;
                     for (let i = currentLine; i >= 0; i--) {
                         const lineText = document.lineAt(i).text;
-                        const codePart = lineText.split('(')[0];
-                        if (/O\d+/i.test(codePart)) {
+                        if (isProgramBlockStart(lineText)) {
                             startLine = i;
                             break;
                         }
@@ -100,15 +108,18 @@ export function registerHoverProvider(context: vscode.ExtensionContext) {
 
                     let assignedValue: string | undefined = undefined;
                     let foundLine: number | undefined = undefined;
-
-                    const assignRegex = new RegExp(`^\\s*${varName.replace('#', '\\#')}\\s*=\\s*(.+)`, 'i');
+                    const macroVariables = new Map<number, number>();
 
                     for (let i = startLine; i <= currentLine; i++) {
                         const lineText = document.lineAt(i).text;
-                        const codePart = lineText.split('(')[0];
-                        const match = codePart.match(assignRegex);
-                        if (match) {
-                            assignedValue = match[1].trim();
+                        const codePart = lineText
+                            .replace(/\([^)]*(?:\)|$)/g, '')
+                            .split(';', 1)[0];
+                        updateMacroVariablesFromLine(lineText, macroVariables);
+
+                        const variableMatch = codePart.match(new RegExp(`${varName.replace('#', '\\#')}\\s*=\\s*(.+)`, 'i'));
+                        if (variableMatch) {
+                            assignedValue = variableMatch[1].trim();
                             foundLine = i + 1;
                         }
                     }
@@ -117,7 +128,11 @@ export function registerHoverProvider(context: vscode.ExtensionContext) {
                     markdown.appendMarkdown(`**マクロ変数** ${varName}\n\n`);
 
                     if (assignedValue !== undefined && foundLine !== undefined) {
-                        markdown.appendMarkdown(`**値**: \`${assignedValue}\` ` + `*(L${foundLine} 行目で設定)*`);
+                        const evaluatedValue = macroVariables.get(Number(varName.slice(1)));
+                        const displayedValue = evaluatedValue === undefined
+                            ? assignedValue
+                            : String(evaluatedValue);
+                        markdown.appendMarkdown(`**値**: \`${displayedValue}\` ` + `*(L${foundLine} 行目で設定)*`);
                     } else {
                         markdown.appendMarkdown(`*NULL*`);
                     }

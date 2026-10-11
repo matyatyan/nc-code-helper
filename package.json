@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "./out/extension.js",
   "license": "MIT",
   "engines": {
@@ -253,6 +253,12 @@
           "default": "#e040fb",
           "format": "color",
           "description": "マクロ制御・変数の表示色"
+        },
+        "ncCodeHelper.rapidTraverseRate": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1,
+          "description": "シーケンス時間計算に使う早送り速度(mm/min)"
         }
       }
     }

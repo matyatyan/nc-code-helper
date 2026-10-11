@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { isNcDocument } from './utils';
+import { evaluateMacroExpression, isMacroCallLine, resolveMacroValue, updateMacroVariablesFromLine } from './macroExpression';
 
 export interface ProgramState {
     coordinateSystem: string;
@@ -23,98 +24,16 @@ const emptyProgramState: ProgramState = {
     spindleSpeed: '未検出'
 };
 
-function evaluateMacroExpression(expression: string, variables: Map<number, number>): number | undefined {
-    let index = 0;
-
-    const skipWhitespace = (): void => {
-        while (/\s/.test(expression[index] ?? '')) {
-            index++;
-        }
-    };
-
-    const parseFactor = (): number | undefined => {
-        skipWhitespace();
-        const character = expression[index];
-
-        if (character === '+' || character === '-') {
-            index++;
-            const value = parseFactor();
-            return value === undefined ? undefined : character === '-' ? -value : value;
-        }
-
-        if (character === '[' || character === '(') {
-            const closingCharacter = character === '[' ? ']' : ')';
-            index++;
-            const value = parseExpression();
-            skipWhitespace();
-            if (expression[index] !== closingCharacter) {
-                return undefined;
-            }
-            index++;
-            return value;
-        }
-
-        const variableMatch = expression.slice(index).match(/^#(\d+)/);
-        if (variableMatch) {
-            index += variableMatch[0].length;
-            return variables.get(Number(variableMatch[1]));
-        }
-
-        const numberMatch = expression.slice(index).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?/);
-        if (!numberMatch) {
-            return undefined;
-        }
-        index += numberMatch[0].length;
-        return Number(numberMatch[0]);
-    };
-
-    const parseTerm = (): number | undefined => {
-        let value = parseFactor();
-        if (value === undefined) {
-            return undefined;
-        }
-
-        while (true) {
-            skipWhitespace();
-            const operator = expression[index];
-            if (operator !== '*' && operator !== '/') {
-                return value;
-            }
-            index++;
-            const right = parseFactor();
-            if (right === undefined) {
-                return undefined;
-            }
-            value = operator === '*' ? value * right : value / right;
-        }
-    };
-
-    const parseExpression = (): number | undefined => {
-        let value = parseTerm();
-        if (value === undefined) {
-            return undefined;
-        }
-
-        while (true) {
-            skipWhitespace();
-            const operator = expression[index];
-            if (operator !== '+' && operator !== '-') {
-                return value;
-            }
-            index++;
-            const right = parseTerm();
-            if (right === undefined) {
-                return undefined;
-            }
-            value = operator === '+' ? value + right : value - right;
-        }
-    };
-
-    const value = parseExpression();
-    skipWhitespace();
-    return value !== undefined && index === expression.length && Number.isFinite(value)
-        ? value
-        : undefined;
+export function hasToolOffsetMismatch(
+    spindleTool: string,
+    toolOffset: string,
+    offsetPrefix: 'H' | 'D'
+): boolean {
+    const spindleNumber = Number(spindleTool.match(/^T(\d+)$/i)?.[1]);
+    const offsetNumber = Number(toolOffset.match(new RegExp(`^${offsetPrefix}(\\d+)$`, 'i'))?.[1]);
+    return Number.isFinite(spindleNumber) &&
+        Number.isFinite(offsetNumber) &&
+        spindleNumber !== offsetNumber;
 }
 
 export class MachineWebviewProvider implements vscode.WebviewViewProvider {
@@ -264,6 +183,7 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                     }
                     .program-state .double-value .field {
                         min-width: 0;
+                        margin-bottom: 0;
                     }
                     table {
                         width: 100%;
@@ -358,25 +278,17 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
         for (let lineNumber = 0; lineNumber <= throughLine; lineNumber++) {
             const line = document.lineAt(lineNumber).text;
             const source = line;
-            const commentFreeLine = source
-                .replace(/\([^)]*(?:\)|$)/g, '')
-                .split(';', 1)[0];
-            const code = commentFreeLine.replace(
-                /#(\d+)\s*=\s*(\[[^\]]*\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/gi,
-                (assignment, variableNumber: string, expression: string) => {
-                    const value = evaluateMacroExpression(expression, macroVariables);
-                    if (value !== undefined) {
-                        macroVariables.set(Number(variableNumber), value);
-                    }
-                    return ' ';
-                }
-            );
-            const words = /([GMTFHSDP])(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
+            if (/(?:^|[^A-Z])O\d+/i.test(source.replace(/\([^)]*(?:\)|$)/g, '').split(';', 1)[0])) {
+                macroVariables.clear();
+            }
+            const code = isMacroCallLine(source) ? '' : updateMacroVariablesFromLine(source, macroVariables);
+            const words = /(?<![A-Z])([GMTFHSDP])(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
             let match: RegExpExecArray | null;
 
             while ((match = words.exec(code)) !== null) {
                 const letter = match[1].toUpperCase();
                 const value = match[2];
+                const resolvedValue = resolveMacroValue(value, macroVariables);
 
                 switch (letter) {
                     case 'G':
@@ -390,9 +302,9 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         } else if (/^4[34](?:\.0)?$/i.test(value)) {
                             toolLengthCompensationActive = true;
                             toolLengthCompensationCancelled = false;
-                            const hMatch = code.match(/H([+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+                            const hMatch = code.match(/(?<![A-Z])H(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
                             if (hMatch) {
-                                toolLengthOffset = `H${hMatch[1]}`;
+                                toolLengthOffset = `H${resolveMacroValue(hMatch[1], macroVariables)}`;
                             }
                         } else if (/^49(?:\.0)?$/i.test(value)) {
                             toolLengthCompensationActive = false;
@@ -401,16 +313,16 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         } else if (/^41(?:\.0)?$/i.test(value)) {
                             toolDiameterCompensationActive = true;
                             toolDiameterCompensationCancelled = false;
-                            const dMatch = code.match(/D([+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+                            const dMatch = code.match(/(?<![A-Z])D(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
                             if (dMatch) {
-                                toolDiameterOffset = `D${dMatch[1]}`;
+                                toolDiameterOffset = `D${resolveMacroValue(dMatch[1], macroVariables)}`;
                             }
                         } else if (/^42(?:\.0)?$/i.test(value)) {
                             toolDiameterCompensationActive = true;
                             toolDiameterCompensationCancelled = false;
-                            const dMatch = code.match(/D([+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+                            const dMatch = code.match(/(?<![A-Z])D(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i);
                             if (dMatch) {
-                                toolDiameterOffset = `D${dMatch[1]}`;
+                                toolDiameterOffset = `D${resolveMacroValue(dMatch[1], macroVariables)}`;
                             }
                         } else if (/^40(?:\.0)?$/i.test(value)) {
                             toolDiameterCompensationActive = false;
@@ -420,15 +332,15 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         break;
                     case 'P':
                         if (state.coordinateSystem === 'G54.1') {
-                            coordinateSystemParameter = `P${value}`;
+                            coordinateSystemParameter = `P${resolvedValue}`;
                         }
                         break;
                     case 'T':
-                        requestedTool = `T${value}`;
+                        requestedTool = `T${resolvedValue}`;
                         magazineTool = requestedTool;
                         break;
                     case 'M':
-                        if (Number(value) === 6 && requestedTool) {
+                        if (Number(resolvedValue) === 6 && requestedTool) {
                             magazineTool = spindleTool;
                             spindleTool = requestedTool;
                             requestedTool = undefined;
@@ -436,19 +348,19 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         break;
                     case 'H':
                         if (toolLengthCompensationActive) {
-                            toolLengthOffset = `H${value}`;
+                            toolLengthOffset = `H${resolvedValue}`;
                         }
                         break;
                     case 'D':
                         if (toolDiameterCompensationActive) {
-                            toolDiameterOffset = `D${value}`;
+                            toolDiameterOffset = `D${resolvedValue}`;
                         }
                         break;
                     case 'F':
-                        state.feedrate = String(evaluateMacroExpression(value, macroVariables) ?? value);
+                        state.feedrate = resolvedValue;
                         break;
                     case 'S':
-                        state.spindleSpeed = String(evaluateMacroExpression(value, macroVariables) ?? value);
+                        state.spindleSpeed = resolvedValue;
                         break;
                 }
             }
@@ -533,6 +445,7 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                     }
                     .program-state .double-value .field {
                         min-width: 0;
+                        margin-bottom: 0;
                     }
                 </style>
             </head>

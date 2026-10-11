@@ -1,6 +1,6 @@
 // NCコードの値と主軸工具・工具長補正番号を検証
 import * as vscode from 'vscode';
-import { MachineWebviewProvider } from './machineWebviewProvider';
+import { hasToolOffsetMismatch, MachineWebviewProvider } from './machineWebviewProvider';
 import { isNcDocument } from './utils';
 
 export function registerNcDiagnostics(
@@ -41,12 +41,50 @@ function updateDiagnostics(
 
     const diagnostics: vscode.Diagnostic[] = [];
     const programStates = programStateProvider.getProgramStates(document);
+    let previousToolLengthMismatch = false;
+    let previousToolDiameterMismatch = false;
+    let toolChanged = false;
+    let feedCommandedSinceToolChange = false;
+    let spindleSpeedCommandedSinceToolChange = false;
+    let checkedFeedAndSpeedSinceToolChange = false;
 
     for (let i = 0; i < document.lineCount; i++) {
         const line = document.lineAt(i);
         const codeText = line.text
             .replace(/\([^)]*(?:\)|$)/g, comment => ' '.repeat(comment.length))
             .split(';', 1)[0];
+        if (/(?<![A-Z])M0?6(?!\d)/i.test(codeText)) {
+            toolChanged = true;
+            feedCommandedSinceToolChange = false;
+            spindleSpeedCommandedSinceToolChange = false;
+            checkedFeedAndSpeedSinceToolChange = false;
+        }
+
+        const hasFeedCommand = /(?<![A-Z])F(?:\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i.test(codeText);
+        const hasSpindleSpeedCommand = /(?<![A-Z])S(?:\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i.test(codeText);
+        feedCommandedSinceToolChange ||= hasFeedCommand;
+        spindleSpeedCommandedSinceToolChange ||= hasSpindleSpeedCommand;
+
+        const hasFeedMotionCommand = /(?<![A-Z])G(?:0?[123]|73|81|83|84|85)(?![\d.])/i.test(codeText);
+        if (toolChanged && hasFeedMotionCommand && !checkedFeedAndSpeedSinceToolChange) {
+            checkedFeedAndSpeedSinceToolChange = true;
+            const missingCommands = [
+                ...(!feedCommandedSinceToolChange ? ['【警告】送り速度：Fが指令されていません'] : []),
+                ...(!spindleSpeedCommandedSinceToolChange ? ['【警告】主軸回転数：Sが指令されていません'] : [])
+            ];
+            for (const message of missingCommands) {
+                const diagnostic = new vscode.Diagnostic(
+                    new vscode.Range(
+                        new vscode.Position(i, 0),
+                        new vscode.Position(i, line.text.length)
+                    ),
+                    message,
+                    vscode.DiagnosticSeverity.Warning
+                );
+                diagnostic.source = 'NC Code Helper';
+                diagnostics.push(diagnostic);
+            }
+        }
 
         for (const match of codeText.matchAll(/([ABCXYZ])([^A-Z\s]*)/gi)) {
             if (match.index === undefined ||
@@ -99,36 +137,74 @@ function updateDiagnostics(
         }
 
         const state = programStates[i];
-        const spindleTool = Number(state.spindleTool.match(/^T(\d+)$/i)?.[1]);
-        const toolLengthOffset = Number(state.toolLengthOffset.match(/^H(\d+)$/i)?.[1]);
-
-        if (!Number.isFinite(spindleTool) || !Number.isFinite(toolLengthOffset) ||
-            spindleTool === toolLengthOffset) {
-            continue;
-        }
-
-        for (const match of codeText.matchAll(/H(\d+)/gi)) {
-            if (match.index === undefined) {
-                continue;
+        const toolLengthMismatch = hasToolOffsetMismatch(
+            state.spindleTool,
+            state.toolLengthOffset,
+            'H'
+        );
+        const toolDiameterMismatch = hasToolOffsetMismatch(
+            state.spindleTool,
+            state.toolDiameterOffset,
+            'D'
+        );
+        const addOffsetDiagnostic = (
+            offsetPrefix: 'H' | 'D',
+            offsetName: string,
+            offsetValue: string,
+            mismatch: boolean,
+            previousMismatch: boolean,
+            activatesCompensation: RegExp
+        ): void => {
+            if (!mismatch) {
+                return;
             }
 
-            if (Number(match[1]) !== toolLengthOffset) {
-                continue;
+            const offsetWord = new RegExp(
+                `(?<![A-Z])${offsetPrefix}(?:\\[[^\\]]+\\]|#[0-9]+|[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+))`,
+                'i'
+            ).exec(codeText);
+            if (!offsetWord && previousMismatch && !activatesCompensation.test(codeText)) {
+                return;
             }
 
-            const hIndex = match.index;
+            const mismatchWord = offsetWord
+                ?? activatesCompensation.exec(codeText)
+                ?? /(?<![A-Z])T(?:\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/i.exec(codeText);
+            const diagnosticStart = mismatchWord?.index ?? 0;
+            const diagnosticEnd = mismatchWord
+                ? diagnosticStart + mismatchWord[0].length
+                : line.text.length;
             const range = new vscode.Range(
-                new vscode.Position(i, hIndex),
-                new vscode.Position(i, hIndex + match[0].length)
+                new vscode.Position(i, diagnosticStart),
+                new vscode.Position(i, diagnosticEnd)
             );
             const diagnostic = new vscode.Diagnostic(
                 range,
-                `【注意】使用工具 (${state.spindleTool}) と工具長補正 (${state.toolLengthOffset}) が一致していません。`,
+                `【注意】使用工具 (${state.spindleTool}) と${offsetName} (${offsetValue}) が一致していません。`,
                 vscode.DiagnosticSeverity.Warning
             );
             diagnostic.source = 'NC Code Helper';
             diagnostics.push(diagnostic);
-        }
+        };
+
+        addOffsetDiagnostic(
+            'H',
+            '工具長補正',
+            state.toolLengthOffset,
+            toolLengthMismatch,
+            previousToolLengthMismatch,
+            /(?<![A-Z])G4[34](?:\.0)?(?=[^0-9.]|$)/i
+        );
+        addOffsetDiagnostic(
+            'D',
+            '工具径補正',
+            state.toolDiameterOffset,
+            toolDiameterMismatch,
+            previousToolDiameterMismatch,
+            /(?<![A-Z])G4[12](?:\.0)?(?=[^0-9.]|$)/i
+        );
+        previousToolLengthMismatch = toolLengthMismatch;
+        previousToolDiameterMismatch = toolDiameterMismatch;
     }
 
     collection.set(document.uri, diagnostics);

@@ -66,34 +66,80 @@ export function updateDecorations(): void {
         };
 
         const grayRanges: vscode.Range[] = [...commentRanges];
-        const processedRanges: vscode.Range[] = [];
+        const processedRanges: Array<{ range: vscode.Range; isMacroVariable: boolean }> = [];
 
-        categories.forEach(cat => {
+        const decorationCategories = [...categories].sort((a, b) =>
+            Number(b.key === 'enableMacroColor') - Number(a.key === 'enableMacroColor')
+        );
+        const rangesByCategory = new Map(
+            categories.map(cat => [cat, [] as vscode.Range[]])
+        );
+
+        const addMatch = (cat: typeof categories[number], match: RegExpExecArray): void => {
+            const matchStart = match.index;
+            const matchEnd = matchStart + match[0].length;
+            const matchRange = new vscode.Range(
+                activeEditor.document.positionAt(matchStart),
+                activeEditor.document.positionAt(matchEnd)
+            );
+            if (isInsideComment(matchRange)) {
+                return;
+            }
+
+            const isMacroVariable = cat.key === 'enableMacroColor' && match[0].startsWith('#');
+            const overlappingRanges = processedRanges.filter(
+                processed => processed.range.intersection(matchRange) !== undefined
+            );
+            if (overlappingRanges.some(processed => !processed.isMacroVariable || isMacroVariable)) {
+                return;
+            }
+
             const isEnabled = config.get<boolean>(cat.key, true);
-            const customRanges: vscode.Range[] = [];
+            let unprocessedRanges: Array<[number, number]> = [[matchStart, matchEnd]];
+            for (const { range: processedRange } of overlappingRanges) {
+                const processedStart = activeEditor.document.offsetAt(processedRange.start);
+                const processedEnd = activeEditor.document.offsetAt(processedRange.end);
+                unprocessedRanges = unprocessedRanges.flatMap(([start, end]) => {
+                    if (processedEnd <= start || processedStart >= end) {
+                        return [[start, end]];
+                    }
+
+                    const remaining: Array<[number, number]> = [];
+                    if (start < processedStart) remaining.push([start, processedStart]);
+                    if (processedEnd < end) remaining.push([processedEnd, end]);
+                    return remaining;
+                });
+            }
+
+            unprocessedRanges.forEach(([start, end]) => {
+                if (start >= end) return;
+
+                const range = new vscode.Range(
+                    activeEditor.document.positionAt(start),
+                    activeEditor.document.positionAt(end)
+                );
+                processedRanges.push({ range, isMacroVariable });
+                if (!isEnabled) {
+                    grayRanges.push(range);
+                } else {
+                    rangesByCategory.get(cat)?.push(range);
+                }
+            });
+        };
+
+        decorationCategories.forEach(cat => {
             let match: RegExpExecArray | null;
             cat.regex.lastIndex = 0;
 
             while ((match = cat.regex.exec(text)) !== null) {
-                const startPos = activeEditor.document.positionAt(match.index);
-                const endPos = activeEditor.document.positionAt(match.index + match[0].length);
-                const range = new vscode.Range(startPos, endPos);
-
-                if (isInsideComment(range) || processedRanges.some(pRange => pRange.contains(range) || range.contains(pRange))) {
-                    continue;
-                }
-
-                processedRanges.push(range);
-
-                if (!isEnabled) {
-                    grayRanges.push(range);
-                } else {
-                    customRanges.push(range);
-                }
+                addMatch(cat, match);
             }
+        });
 
+        categories.forEach(cat => {
             if (cat.decorationType) {
-                activeEditor.setDecorations(cat.decorationType, isEnabled ? customRanges : []);
+                const isEnabled = config.get<boolean>(cat.key, true);
+                activeEditor.setDecorations(cat.decorationType, isEnabled ? rangesByCategory.get(cat) ?? [] : []);
             }
         });
 
