@@ -1,9 +1,15 @@
 import * as vscode from 'vscode';
 import { isNcDocument } from './utils';
-import { evaluateMacroExpression, isMacroCallLine, resolveMacroValue, updateMacroVariablesFromLine } from './macroExpression';
+import { evaluateMacroExpression, isMacroCallLine, resolveMacroValue, stripNcComments, updateMacroVariablesFromLine } from './macroExpression';
 
 export interface ProgramState {
     coordinateSystem: string;
+    axisA: string;
+    axisB: string;
+    axisC: string;
+    axisX: string;
+    axisY: string;
+    axisZ: string;
     spindleTool: string;
     toolLengthOffset: string;
     toolDiameterOffset: string;
@@ -15,6 +21,12 @@ export interface ProgramState {
 
 const emptyProgramState: ProgramState = {
     coordinateSystem: '未検出',
+    axisA: '未検出',
+    axisB: '未検出',
+    axisC: '未検出',
+    axisX: '未検出',
+    axisY: '未検出',
+    axisZ: '未検出',
     spindleTool: '未検出',
     toolLengthOffset: '未検出',
     toolDiameterOffset: '未検出',
@@ -23,6 +35,48 @@ const emptyProgramState: ProgramState = {
     feedrateUnit: 'mm/min',
     spindleSpeed: '未検出'
 };
+
+function formatLinearAxisValue(value: string): string {
+    return /^[+-]?\d+$/.test(value) ? `${value}.0` : value;
+}
+
+function updateConditionalMacroAssignment(line: string, variables: Map<number, number>): boolean {
+    const uncommentedLine = stripNcComments(line);
+    const isConditionalThen = /^\s*IF\s*\[.*\]\s*THEN\b/i.test(uncommentedLine) &&
+        /#\d+\s*=/.test(uncommentedLine);
+    if (!isConditionalThen) {
+        return false;
+    }
+
+    const assignment = /^\s*IF\s*\[\s*(.*?)\s*\]\s*THEN\s*#(\d+)\s*=\s*(.*?)\s*$/i.exec(uncommentedLine);
+    const condition = assignment && /^\s*(.*?)\s*(EQ|NE|GT|LT|GE|LE)\s*(.*?)\s*$/i.exec(assignment[1]);
+    if (!assignment || !condition) {
+        return true;
+    }
+
+    const left = evaluateMacroExpression(condition[1], variables);
+    const right = evaluateMacroExpression(condition[3], variables);
+    const assignedValue = evaluateMacroExpression(assignment[3], variables);
+    if (left === undefined || right === undefined || assignedValue === undefined) {
+        return true;
+    }
+
+    const conditionMet = (() => {
+        switch (condition[2].toUpperCase()) {
+            case 'EQ': return left === right;
+            case 'NE': return left !== right;
+            case 'GT': return left > right;
+            case 'LT': return left < right;
+            case 'GE': return left >= right;
+            case 'LE': return left <= right;
+            default: return false;
+        }
+    })();
+    if (conditionMet) {
+        variables.set(Number(assignment[2]), assignedValue);
+    }
+    return true;
+}
 
 export function hasToolOffsetMismatch(
     spindleTool: string,
@@ -165,25 +219,19 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         min-height: 0;
                         overflow-y: auto;
                     }
-                    .program-state p,
-                    .program-state .double-value .field {
+                    .program-state .state-row {
+                        display: grid;
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                        column-gap: 10px;
+                        margin: 0 0 8px;
+                    }
+                    .program-state .field {
                         display: grid;
                         grid-template-columns: 6.6em 0.6em minmax(0, 1fr);
                         column-gap: 2px;
-                        margin: 0 0 8px;
-                        font-size: 1em;
-                    }
-                    .program-state .double-value {
-                        display: grid;
-                        grid-template-columns: repeat(2, minmax(0, 1fr));
-                        column-gap: 10px;
-                        row-gap: 8px;
-                        margin: 0 0 8px;
-                        align-items: start;
-                    }
-                    .program-state .double-value .field {
                         min-width: 0;
-                        margin-bottom: 0;
+                        margin: 0;
+                        font-size: 1em;
                     }
                     table {
                         width: 100%;
@@ -229,16 +277,32 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                     </section>
                     <section class="program-state" aria-label="カーソル位置のプログラム状態">
                         <h1>加工条件データ</h1>
-                        <p><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
-                        <p><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
-                        <div class="double-value" aria-label="工具補正">
+                        <div class="state-row">
+                            <p class="field"><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="回転軸">
+                            <p class="field"><span>回転軸A</span><span>：</span><span data-state="axisA">${this._programState.axisA}</span></p>
+                            <p class="field"><span>回転軸B</span><span>：</span><span data-state="axisB">${this._programState.axisB}</span></p>
+                            <p class="field"><span>回転軸C</span><span>：</span><span data-state="axisC">${this._programState.axisC}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="直線軸">
+                            <p class="field"><span>直線軸X</span><span>：</span><span data-state="axisX">${this._programState.axisX}</span></p>
+                            <p class="field"><span>直線軸Y</span><span>：</span><span data-state="axisY">${this._programState.axisY}</span></p>
+                            <p class="field"><span>直線軸Z</span><span>：</span><span data-state="axisZ">${this._programState.axisZ}</span></p>
+                        </div>
+                        <div class="state-row">
+                            <p class="field"><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="工具補正">
                             <p class="field"><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
                             <p class="field"><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
                         </div>
-                        <p><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
-                        <div class="double-value" aria-label="回転・送り">
-                            <p class="field"><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
-                            <p class="field"><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
+                        <div class="state-row">
+                            <p class="field"><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="回転・送り">
+                            <p class="field"><span>回転数S</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                            <p class="field"><span>送り速度F</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
                         </div>
                     </section>
                 </div>
@@ -263,6 +327,12 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
     public getProgramStates(document: vscode.TextDocument, throughLine = document.lineCount - 1): ProgramState[] {
         const state: ProgramState = { ...emptyProgramState };
         const states: ProgramState[] = [];
+        let axisA: string | undefined;
+        let axisB: string | undefined;
+        let axisC: string | undefined;
+        let axisX: string | undefined;
+        let axisY: string | undefined;
+        let axisZ: string | undefined;
         let requestedTool: string | undefined;
         let spindleTool: string | undefined;
         let magazineTool: string | undefined;
@@ -281,8 +351,11 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
             if (/(?:^|[^A-Z])O\d+/i.test(source.replace(/\([^)]*(?:\)|$)/g, '').split(';', 1)[0])) {
                 macroVariables.clear();
             }
-            const code = isMacroCallLine(source) ? '' : updateMacroVariablesFromLine(source, macroVariables);
-            const words = /(?<![A-Z])([GMTFHSDP])(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
+            const isConditionalAssignment = updateConditionalMacroAssignment(source, macroVariables);
+            const code = isMacroCallLine(source) || isConditionalAssignment
+                ? ''
+                : updateMacroVariablesFromLine(source, macroVariables);
+            const words = /(?<![A-Z])([GMTFHSDPABCXYZ])(\[[^\]]+\]|#[0-9]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
             let match: RegExpExecArray | null;
 
             while ((match = words.exec(code)) !== null) {
@@ -362,11 +435,35 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                     case 'S':
                         state.spindleSpeed = resolvedValue;
                         break;
+                    case 'A':
+                        axisA = resolvedValue;
+                        break;
+                    case 'B':
+                        axisB = resolvedValue;
+                        break;
+                    case 'C':
+                        axisC = resolvedValue;
+                        break;
+                    case 'X':
+                        axisX = formatLinearAxisValue(resolvedValue);
+                        break;
+                    case 'Y':
+                        axisY = formatLinearAxisValue(resolvedValue);
+                        break;
+                    case 'Z':
+                        axisZ = formatLinearAxisValue(resolvedValue);
+                        break;
                 }
             }
 
             states.push({
                 ...state,
+                axisA: axisA ?? '未検出',
+                axisB: axisB ?? '未検出',
+                axisC: axisC ?? '未検出',
+                axisX: axisX ?? '未検出',
+                axisY: axisY ?? '未検出',
+                axisZ: axisZ ?? '未検出',
                 coordinateSystem: coordinateSystemParameter
                     ? `${state.coordinateSystem} ${coordinateSystemParameter}`
                     : state.coordinateSystem,
@@ -427,25 +524,19 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                         border-left: 1px solid var(--vscode-widget-border);
                         padding: 0 0 10px 16px;
                     }
-                    .program-state p,
-                    .program-state .double-value .field {
+                    .program-state .state-row {
+                        display: grid;
+                        grid-template-columns: repeat(3, minmax(0, 1fr));
+                        column-gap: 10px;
+                        margin: 0 0 8px;
+                    }
+                    .program-state .field {
                         display: grid;
                         grid-template-columns: 6.6em 0.6em minmax(0, 1fr);
                         column-gap: 2px;
-                        margin: 0 0 8px;
-                        font-size: 1em;
-                    }
-                    .program-state .double-value {
-                        display: grid;
-                        grid-template-columns: repeat(2, minmax(0, 1fr));
-                        column-gap: 10px;
-                        row-gap: 8px;
-                        margin: 0 0 8px;
-                        align-items: start;
-                    }
-                    .program-state .double-value .field {
                         min-width: 0;
-                        margin-bottom: 0;
+                        margin: 0;
+                        font-size: 1em;
                     }
                 </style>
             </head>
@@ -456,16 +547,32 @@ export class MachineWebviewProvider implements vscode.WebviewViewProvider {
                     </section>
                     <section class="program-state" aria-label="カーソル位置のプログラム状態">
                         <h1>加工条件データ</h1>
-                        <p><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
-                        <p><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
-                        <div class="double-value" aria-label="工具補正">
-                            <p class="field"><span>工具長補正</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
-                            <p class="field"><span>工具径補正</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        <div class="state-row">
+                            <p class="field"><span>使用座標系</span><span>：</span><span data-state="coordinateSystem">${this._programState.coordinateSystem}</span></p>
                         </div>
-                        <p><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
-                        <div class="double-value" aria-label="回転・送り">
-                            <p class="field"><span>主軸回転数</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
-                            <p class="field"><span>送り速度</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
+                        <div class="state-row" aria-label="回転軸">
+                            <p class="field"><span>回転軸A</span><span>：</span><span data-state="axisA">${this._programState.axisA}</span></p>
+                            <p class="field"><span>回転軸B</span><span>：</span><span data-state="axisB">${this._programState.axisB}</span></p>
+                            <p class="field"><span>回転軸C</span><span>：</span><span data-state="axisC">${this._programState.axisC}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="直線軸">
+                            <p class="field"><span>直線軸X</span><span>：</span><span data-state="axisX">${this._programState.axisX}</span></p>
+                            <p class="field"><span>直線軸Y</span><span>：</span><span data-state="axisY">${this._programState.axisY}</span></p>
+                            <p class="field"><span>直線軸Z</span><span>：</span><span data-state="axisZ">${this._programState.axisZ}</span></p>
+                        </div>
+                        <div class="state-row">
+                            <p class="field"><span>使用工具</span><span>：</span><span data-state="spindleTool">${this._programState.spindleTool}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="工具補正">
+                            <p class="field"><span>工具長補正H</span><span>：</span><span data-state="toolLengthOffset">${this._programState.toolLengthOffset}</span></p>
+                            <p class="field"><span>工具径補正D</span><span>：</span><span data-state="toolDiameterOffset">${this._programState.toolDiameterOffset}</span></p>
+                        </div>
+                        <div class="state-row">
+                            <p class="field"><span>待機工具</span><span>：</span><span data-state="magazineTool">${this._programState.magazineTool}</span></p>
+                        </div>
+                        <div class="state-row" aria-label="回転・送り">
+                            <p class="field"><span>回転数S</span><span>：</span><span><span data-state="spindleSpeed">${this._programState.spindleSpeed}</span> min⁻¹</span></p>
+                            <p class="field"><span>送り速度F</span><span>：</span><span><span data-state="feedrate">${this._programState.feedrate}</span> <span data-state="feedrateUnit">${this._programState.feedrateUnit}</span></span></p>
                         </div>
                     </section>
                 </div>

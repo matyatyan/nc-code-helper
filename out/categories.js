@@ -16,7 +16,7 @@ exports.categories = [
         colorKey: 'colorMacro',
         label: 'MACRO (マクロ機能・制御文)',
         icon: 'symbol-variable',
-        regex: /#\d+|#\[[^\]]+\]|\b(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)\b/gi,
+        regex: /#\d+|#\[[^\]]+\]|(?<![A-Z])(IF|THEN|GOTO|WHILE|DO|END|EQ|NE|GT|GE|LT|LE|AND|OR|XOR|FIX|FUP|ROUND|ABS|SQRT|SIN|COS|TAN|ATAN|EXP|LN|BIN|BCD)(?![A-Z])/gi,
         defaultColor: '#e040fb'
     }
 ];

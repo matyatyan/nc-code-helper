@@ -2,7 +2,7 @@
   "name": "nc-code-helper",
   "displayName": "NC Code Helper",
   "description": "G-code highlighting and outline navigation helper for NC machining programs.",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "main": "./out/extension.js",
   "license": "MIT",
   "engines": {
@@ -67,6 +67,13 @@
         {
           "command": "ncCodeHelper.openStorageFolder",
           "when": "view == ncCodeHelperMachinesView",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ncCodeHelper.alignCncCode",
+          "when": "editorTextFocus && editorHasSelection && editorLangId == gcode",
           "group": "navigation"
         }
       ]
@@ -138,6 +145,10 @@
         "command": "ncCodeHelper.openStorageFolder",
         "title": "設備JSON保存フォルダを開く",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "ncCodeHelper.alignCncCode",
+        "title": "GOTO整列"
       }
     ],
     "configuration": {

@@ -6,8 +6,9 @@ import { registerHoverProvider } from './hover';
 import { registerCommands } from './commands';
 import { registerNcDiagnostics } from './diagnostics';
 import { isNcDocument } from './utils';
-import { MachineWebviewProvider } from './machineWebviewProvider'; // ★ import を追加
+import { MachineWebviewProvider } from './machineWebviewProvider';
 import { registerSequenceTimeHints } from './sequenceTime';
+import { registerCncAligner } from './aligner';
 
 function trySetNcLanguage(doc: vscode.TextDocument): void {
     if (!doc || doc.languageId === 'gcode' || doc.languageId === 'nc') {
@@ -105,6 +106,8 @@ export function activate(context: vscode.ExtensionContext) {
             colorDataProvider.refresh(); // カラーツリーの再読み込み
         }
     }, null, context.subscriptions);
+
+    registerCncAligner(context);
 
     // 7. 初回描画の実行
     provider.updateProgramState(vscode.window.activeTextEditor);

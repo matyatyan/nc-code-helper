@@ -66,76 +66,53 @@ export function updateDecorations(): void {
         };
 
         const grayRanges: vscode.Range[] = [...commentRanges];
-        const processedRanges: Array<{ range: vscode.Range; isMacroVariable: boolean }> = [];
-
-        const decorationCategories = [...categories].sort((a, b) =>
-            Number(b.key === 'enableMacroColor') - Number(a.key === 'enableMacroColor')
-        );
         const rangesByCategory = new Map(
             categories.map(cat => [cat, [] as vscode.Range[]])
         );
+        const macroCategory = categories.find(cat => cat.key === 'enableMacroColor');
+        const macroKeywordSpans: { start: number; end: number }[] = [];
 
-        const addMatch = (cat: typeof categories[number], match: RegExpExecArray): void => {
-            const matchStart = match.index;
-            const matchEnd = matchStart + match[0].length;
-            const matchRange = new vscode.Range(
-                activeEditor.document.positionAt(matchStart),
-                activeEditor.document.positionAt(matchEnd)
-            );
-            if (isInsideComment(matchRange)) {
-                return;
+        if (macroCategory) {
+            let match: RegExpExecArray | null;
+            macroCategory.regex.lastIndex = 0;
+            while ((match = macroCategory.regex.exec(text)) !== null) {
+                macroKeywordSpans.push({ start: match.index, end: match.index + match[0].length });
             }
+        }
 
-            const isMacroVariable = cat.key === 'enableMacroColor' && match[0].startsWith('#');
-            const overlappingRanges = processedRanges.filter(
-                processed => processed.range.intersection(matchRange) !== undefined
-            );
-            if (overlappingRanges.some(processed => !processed.isMacroVariable || isMacroVariable)) {
-                return;
-            }
-
+        // 各カテゴリごとにマッチを抽出し、コメント内以外ならそのまま登録
+        categories.forEach(cat => {
             const isEnabled = config.get<boolean>(cat.key, true);
-            let unprocessedRanges: Array<[number, number]> = [[matchStart, matchEnd]];
-            for (const { range: processedRange } of overlappingRanges) {
-                const processedStart = activeEditor.document.offsetAt(processedRange.start);
-                const processedEnd = activeEditor.document.offsetAt(processedRange.end);
-                unprocessedRanges = unprocessedRanges.flatMap(([start, end]) => {
-                    if (processedEnd <= start || processedStart >= end) {
-                        return [[start, end]];
-                    }
-
-                    const remaining: Array<[number, number]> = [];
-                    if (start < processedStart) remaining.push([start, processedStart]);
-                    if (processedEnd < end) remaining.push([processedEnd, end]);
-                    return remaining;
-                });
-            }
-
-            unprocessedRanges.forEach(([start, end]) => {
-                if (start >= end) return;
-
-                const range = new vscode.Range(
-                    activeEditor.document.positionAt(start),
-                    activeEditor.document.positionAt(end)
-                );
-                processedRanges.push({ range, isMacroVariable });
-                if (!isEnabled) {
-                    grayRanges.push(range);
-                } else {
-                    rangesByCategory.get(cat)?.push(range);
-                }
-            });
-        };
-
-        decorationCategories.forEach(cat => {
             let match: RegExpExecArray | null;
             cat.regex.lastIndex = 0;
 
             while ((match = cat.regex.exec(text)) !== null) {
-                addMatch(cat, match);
+                const matchStart = match.index;
+                const matchEnd = matchStart + match[0].length;
+                if (cat !== macroCategory && macroKeywordSpans.some(span =>
+                    matchStart < span.end && span.start < matchEnd
+                )) {
+                    continue;
+                }
+
+                const matchRange = new vscode.Range(
+                    activeEditor.document.positionAt(matchStart),
+                    activeEditor.document.positionAt(matchEnd)
+                );
+
+                if (isInsideComment(matchRange)) {
+                    continue;
+                }
+
+                if (!isEnabled) {
+                    grayRanges.push(matchRange);
+                } else {
+                    rangesByCategory.get(cat)?.push(matchRange);
+                }
             }
         });
 
+        // 各カテゴリのデコレーションを適用
         categories.forEach(cat => {
             if (cat.decorationType) {
                 const isEnabled = config.get<boolean>(cat.key, true);
@@ -143,6 +120,7 @@ export function updateDecorations(): void {
             }
         });
 
+        // コメントなどのグレー表示を適用
         activeEditor.setDecorations(grayDecorationType, grayRanges);
     } catch (error) {
         console.error('[NC Code Helper] Failed to update NC decorations.', error);
